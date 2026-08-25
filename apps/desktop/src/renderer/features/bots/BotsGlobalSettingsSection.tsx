@@ -7,13 +7,22 @@
  * Card geometry follows the neighbouring general-tab sections (rounded-xl / Card
  * fill / 1px Board / 20px padding).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBotTranslation } from './botPronounContext';
 
 import { cn } from '@/lib/utils';
 import { BotAvatar } from './BotAvatar';
-import { exportBotBundle, useBotProfiles } from './botStore';
+import { ModelSelector } from '@/components/new-chat/ModelSelector';
+import { VendorSegmentedSwitcher } from '@/components/new-chat/VendorSegmentedSwitcher';
+import {
+  exportBotBundle,
+  getBotGlobalModelOverride,
+  getEffectiveBotModelSettings,
+  setBotGlobalModelOverride,
+  subscribeBotGlobalModel,
+  useBotProfiles,
+} from './botStore';
 
 const CARD_CLASS = cn(
   'rounded-xl p-5',
@@ -30,8 +39,13 @@ export function BotsGlobalSettingsSection() {
   const navigate = useNavigate();
   const bots = useBotProfiles();
   const activeBots = bots.filter((bot) => bot.status !== 'archived');
+  const [vendor, setVendor] = useState<'cc' | 'codex' | 'pi'>('cc');
+  const [, bumpModelSettings] = useState(0);
   const [busyBotId, setBusyBotId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => subscribeBotGlobalModel(() => bumpModelSettings((value) => value + 1)), []);
+  const modelSettings = getEffectiveBotModelSettings(vendor, getBotGlobalModelOverride(vendor));
 
   const exportBot = (botId: string) => {
     setBusyBotId(botId);
@@ -75,6 +89,61 @@ export function BotsGlobalSettingsSection() {
         <p className={ROW_LABEL_CLASS}>{t('bots.globalSettings.notifications.title')}</p>
         <p className={ROW_HINT_CLASS}>{t('bots.globalSettings.notifications.note')}</p>
         <p className={ROW_HINT_CLASS}>{t('bots.globalSettings.notifications.footnote')}</p>
+      </div>
+
+      <div className={cn(CARD_CLASS, 'flex flex-col gap-4')}>
+        <div>
+          <p className={ROW_LABEL_CLASS}>{t('bots.modelLabel')}</p>
+          <p className={cn('mt-1', ROW_HINT_CLASS)}>
+            {t('bots.globalSettings.description')}
+          </p>
+        </div>
+        <VendorSegmentedSwitcher
+          value={vendor}
+          dense
+          width={300}
+          ariaLabel={t('bots.harnessLabel')}
+          onChange={(next) => {
+            if (next === 'cc' || next === 'codex' || next === 'pi') setVendor(next);
+          }}
+        />
+        <ModelSelector
+          modelId={modelSettings.model}
+          effort={modelSettings.effort}
+          vendorKey={vendor}
+          currentProviderId={modelSettings.providerId}
+          triggerVariant="field"
+          popoverSide="bottom"
+          onModelChange={(model) => {
+            setBotGlobalModelOverride(vendor, {
+              ...modelSettings,
+              model,
+            });
+          }}
+          onEffortChange={(effort) => {
+            setBotGlobalModelOverride(vendor, {
+              ...modelSettings,
+              effort,
+            });
+          }}
+          onProviderChange={(providerId, model, effort) => {
+            setBotGlobalModelOverride(vendor, {
+              ...modelSettings,
+              providerId,
+              ...(model ? { model } : {}),
+              ...(effort ? { effort } : {}),
+            });
+          }}
+        />
+        {getBotGlobalModelOverride(vendor) ? (
+          <button
+            type="button"
+            className="self-start text-11 text-[var(--text-tertiary)] underline-offset-2 hover:text-[var(--text-primary)] hover:underline"
+            onClick={() => setBotGlobalModelOverride(vendor, null)}
+          >
+            {t('settings.defaults.restore')}
+          </button>
+        ) : null}
       </div>
 
       <div className={cn(CARD_CLASS, 'flex flex-col gap-4')}>

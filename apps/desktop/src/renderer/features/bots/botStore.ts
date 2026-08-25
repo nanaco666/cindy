@@ -38,6 +38,8 @@ export type { BotImMigrationPlan, BotImMigrationRecord } from '../../../shared/b
 
 export interface BotCapabilities {
   model: string;
+  /** Only present when the user explicitly chose a model for this Bot. */
+  modelOverride?: BotModelOverride | null;
   providerId?: string | null;
   effort: string;
   fastMode: boolean;
@@ -60,6 +62,13 @@ export interface BotCapabilities {
   sessionControlMode: BotSessionControlMode;
 }
 
+export interface BotModelOverride {
+  model: string;
+  providerId: string | null;
+  effort: string;
+  fastMode: boolean;
+}
+
 function vendorForHarness(harness: BotCapabilities['harness']): 'cc' | 'codex' | 'pi' {
   return harness === 'claude' ? 'cc' : harness;
 }
@@ -68,6 +77,36 @@ function normalizeBotModel(model: unknown, harness: BotCapabilities['harness']):
   if (typeof model === 'string' && model.trim()) return model.trim();
   // 旧记录缺 model 时走与新建同一条口径,不另读 lastByVendor 的种子快照。
   return defaultBotModel(vendorForHarness(harness));
+}
+
+function normalizeBotModelOverride(
+  value: unknown,
+  capabilities: Partial<BotCapabilities>,
+  harness: BotCapabilities['harness'],
+): BotModelOverride | null {
+  if (value === null) return null;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    if (typeof record.model === 'string' && record.model.trim()) {
+      return {
+        model: record.model.trim(),
+        providerId: typeof record.providerId === 'string' ? record.providerId : null,
+        effort: typeof record.effort === 'string' ? record.effort : '',
+        fastMode: record.fastMode === true,
+      };
+    }
+  }
+  // Legacy profiles had no source marker. Preserve the concrete value as an
+  // explicit choice instead of silently changing a user's established Bot.
+  if (typeof capabilities.model === 'string' && capabilities.model.trim()) {
+    return {
+      model: capabilities.model.trim(),
+      providerId: typeof capabilities.providerId === 'string' ? capabilities.providerId : null,
+      effort: typeof capabilities.effort === 'string' ? capabilities.effort : '',
+      fastMode: capabilities.fastMode === true,
+    };
+  }
+  return getEffectiveBotModelSettings(vendorForHarness(harness), null);
 }
 
 function normalizeBotHarness(value: unknown): BotCapabilities['harness'] {
@@ -262,17 +301,85 @@ export function defaultBotModel(vendor: ReturnType<typeof vendorForHarness>): st
   return getPersistedVendorModel(vendor) || getDefaultModelForVendor(vendor).id;
 }
 
+const BOT_GLOBAL_MODEL_KEY = 'cindy.bots.global-model-overrides.v1';
+type BotModelVendor = ReturnType<typeof vendorForHarness>;
+const botModelListeners = new Set<() => void>();
+
+function readGlobalModelOverrides(): Partial<Record<BotModelVendor, BotModelOverride>> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(BOT_GLOBAL_MODEL_KEY);
+    const value = raw ? (JSON.parse(raw) as unknown) : null;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const result: Partial<Record<BotModelVendor, BotModelOverride>> = {};
+    for (const vendor of ['cc', 'codex', 'pi'] as const) {
+      const item = (value as Record<string, unknown>)[vendor];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const record = item as Record<string, unknown>;
+      if (typeof record.model !== 'string' || !record.model.trim()) continue;
+      result[vendor] = {
+        model: record.model.trim(),
+        providerId: typeof record.providerId === 'string' ? record.providerId : null,
+        effort: typeof record.effort === 'string' ? record.effort : '',
+        fastMode: record.fastMode === true,
+      };
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+export function getBotGlobalModelOverride(vendor: BotModelVendor): BotModelOverride | null {
+  return readGlobalModelOverrides()[vendor] ?? null;
+}
+
+export function getEffectiveBotModelSettings(
+  vendor: BotModelVendor,
+  override?: BotModelOverride | null,
+): BotModelOverride {
+  const selected = override ?? getBotGlobalModelOverride(vendor);
+  if (selected) return selected;
+  const model = getDefaultModelForVendor(vendor);
+  return {
+    model: model.id,
+    providerId: null,
+    effort: model.defaultEffort ?? '',
+    fastMode: false,
+  };
+}
+
+export function setBotGlobalModelOverride(
+  vendor: BotModelVendor,
+  override: BotModelOverride | null,
+): void {
+  if (typeof window === 'undefined') return;
+  const current = readGlobalModelOverrides();
+  if (override) current[vendor] = override;
+  else delete current[vendor];
+  window.localStorage.setItem(BOT_GLOBAL_MODEL_KEY, JSON.stringify(current));
+  for (const listener of botModelListeners) listener();
+}
+
+export function subscribeBotGlobalModel(listener: () => void): () => void {
+  botModelListeners.add(listener);
+  return () => botModelListeners.delete(listener);
+}
+
 function defaultCapabilities(harness: BotCapabilities['harness'] = 'claude'): BotCapabilities {
   const vendor = vendorForHarness(harness);
   const prefs = getDraft().lastByVendor[vendor];
-  const model = defaultBotModel(vendor);
+  const override = getBotGlobalModelOverride(vendor);
+  const resolved = getEffectiveBotModelSettings(vendor, override);
+  const model = resolved.model;
   return {
     model,
+    modelOverride: null,
     // 模型没沿用 lastByVendor 时,来源也不能沿用 —— providerId 与 model 必须同源,
     // 否则会拿一个来源去解析另一个来源的模型 id。
-    providerId: model === prefs.model ? (prefs.providerId ?? null) : null,
-    effort: prefs.effort,
-    fastMode: getDraft().fastModeByModel[model] === true,
+    providerId: resolved.providerId ?? (model === prefs.model ? (prefs.providerId ?? null) : null),
+    effort: resolved.effort || prefs.effort,
+    fastMode: override ? resolved.fastMode : getDraft().fastModeByModel[model] === true,
     harness,
     skillMode: 'inherit',
     skillsExcluded: [],
@@ -340,6 +447,8 @@ function readProfiles(): BotProfile[] {
       const capabilities = value.capabilities ?? defaultCapabilities();
       const harness = normalizeBotHarness(capabilities.harness);
       const defaults = defaultCapabilities(harness);
+      const modelOverride = normalizeBotModelOverride(capabilities.modelOverride, capabilities, harness);
+      const resolvedModel = modelOverride ?? getEffectiveBotModelSettings(vendorForHarness(harness), null);
       const legacyTools = normalizeStringList(
         (capabilities as unknown as { tools?: unknown }).tools,
       );
@@ -362,22 +471,32 @@ function readProfiles(): BotProfile[] {
             ...capabilities,
             harness,
             providerId:
-              typeof capabilities.providerId === 'string'
+              capabilities.modelOverride === null
+                ? resolvedModel.providerId
+                : modelOverride
+                ? modelOverride.providerId
+                : typeof capabilities.providerId === 'string'
                 ? capabilities.providerId
                 : capabilities.providerId === null
                   ? null
-                  : defaults.providerId,
+                  : resolvedModel.providerId,
             effort:
-              typeof capabilities.effort === 'string' && capabilities.effort
+              capabilities.modelOverride === null
+                ? resolvedModel.effort
+                : modelOverride?.effort
+                  ? modelOverride.effort
+                : typeof capabilities.effort === 'string' && capabilities.effort
                 ? capabilities.effort
                 : defaults.effort,
-            fastMode: capabilities.fastMode === true,
+            fastMode: capabilities.modelOverride === null ? resolvedModel.fastMode : modelOverride?.fastMode === true,
             automation: normalizeBotAutomation(capabilities.automation),
             sessionControlMode: normalizeBotSessionControlMode(capabilities.sessionControlMode),
             permissions: normalizeBotPermissions(capabilities.permissions),
             skillMode: normalizeSkillMode(capabilities.skillMode, value.skills),
             skillsExcluded: normalizeStringList(capabilities.skillsExcluded),
-            model: normalizeBotModel(capabilities.model, harness),
+            model: resolvedModel.model || normalizeBotModel(capabilities.model, harness),
+            modelOverride:
+              capabilities.modelOverride === null ? null : modelOverride,
             toolsetMode: normalizeCapabilityMode(capabilities.toolsetMode, toolsets),
             toolsets,
             mcpMode: normalizeCapabilityMode(capabilities.mcpMode, capabilities.mcpServers),
@@ -440,6 +559,8 @@ function normalizeDbProfile(value: unknown): BotProfile | null {
   const harness = normalizeBotHarness(item.capabilities?.harness);
   const rawCapabilities = item.capabilities as (BotCapabilities & { tools?: unknown }) | undefined;
   const defaults = defaultCapabilities(harness);
+  const modelOverride = normalizeBotModelOverride(rawCapabilities?.modelOverride, rawCapabilities ?? {}, harness);
+  const resolvedModel = modelOverride ?? getEffectiveBotModelSettings(vendorForHarness(harness), null);
   const legacyTools = normalizeStringList(rawCapabilities?.tools);
   const toolsets =
     normalizeStringList(rawCapabilities?.toolsets).length > 0
@@ -486,22 +607,31 @@ function normalizeDbProfile(value: unknown): BotProfile | null {
       ...(item.capabilities ?? {}),
       harness,
       providerId:
-        typeof rawCapabilities?.providerId === 'string'
+        rawCapabilities?.modelOverride === null
+          ? resolvedModel.providerId
+          : modelOverride
+          ? modelOverride.providerId
+          : typeof rawCapabilities?.providerId === 'string'
           ? rawCapabilities.providerId
           : rawCapabilities?.providerId === null
             ? null
-            : defaults.providerId,
+            : resolvedModel.providerId,
       effort:
-        typeof rawCapabilities?.effort === 'string' && rawCapabilities.effort
+        rawCapabilities?.modelOverride === null
+          ? resolvedModel.effort
+          : modelOverride?.effort
+            ? modelOverride.effort
+          : typeof rawCapabilities?.effort === 'string' && rawCapabilities.effort
           ? rawCapabilities.effort
           : defaults.effort,
-      fastMode: rawCapabilities?.fastMode === true,
+      fastMode: rawCapabilities?.modelOverride === null ? resolvedModel.fastMode : modelOverride?.fastMode === true,
       automation: normalizeBotAutomation(rawCapabilities?.automation),
       sessionControlMode: normalizeBotSessionControlMode(rawCapabilities?.sessionControlMode),
       permissions: normalizeBotPermissions(rawCapabilities?.permissions),
       skillMode: normalizeSkillMode(item.capabilities?.skillMode, item.skills),
       skillsExcluded: normalizeStringList(rawCapabilities?.skillsExcluded),
-      model: normalizeBotModel(item.capabilities?.model, harness),
+      model: resolvedModel.model || normalizeBotModel(item.capabilities?.model, harness),
+      modelOverride: rawCapabilities?.modelOverride === null ? null : modelOverride,
       toolsetMode: normalizeCapabilityMode(rawCapabilities?.toolsetMode, toolsets),
       toolsets,
       mcpMode: normalizeCapabilityMode(rawCapabilities?.mcpMode, rawCapabilities?.mcpServers),

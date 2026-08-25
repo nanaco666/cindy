@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { buildBotReferenceHref } from '@cindy/maker-shared/agent-input-projection';
+
 import {
   botGroupRoomState,
+  normalizeBotGroupReferences,
   presentBotGroupMessage,
+  presentedRoomMessages,
 } from '../botGroupChatPresentation';
 
 describe('Bot group chat presentation', () => {
@@ -48,6 +52,38 @@ describe('Bot group chat presentation', () => {
       threadId: 'thread-files',
       attachments: ['screen.png', 'spec.pdf'],
     });
+  });
+
+  it('restores oldest-first order when local message listing is newest-first', () => {
+    const message = (id: string, rowid: number, text: string) => ({
+      id,
+      rowid,
+      clientId: id,
+      sessionId: 'room-session',
+      role: 'user',
+      content: text,
+      toolUseId: null,
+      agentMeta: { botGroup: { senderKind: 'user', name: 'You', threadId: 'thread-1' } },
+      createdAt: `2026-01-01T00:00:0${rowid}.000Z`,
+    });
+    expect(presentedRoomMessages([
+      message('new', 2, 'second'),
+      message('old', 1, 'first'),
+    ] as never).map((item) => item.value.text)).toEqual(['first', 'second']);
+  });
+
+  it('turns selected Bot chips into group-recognizable @mentions', () => {
+    const href = buildBotReferenceHref('bot-b');
+    expect(normalizeBotGroupReferences(
+      `[Beta](${href}) please check`,
+      [{ kind: 'bot', start: 0, end: `[Beta](${href})`.length, href, botId: 'bot-b', name: 'Beta' }],
+      [{ id: 'bot-b', name: 'Beta' }],
+    )).toBe('@Beta please check');
+    expect(normalizeBotGroupReferences(
+      'hello',
+      [{ kind: 'session', start: 0, end: 5, href: 'cindy://session/x', sessionId: 'x', title: 'x' }],
+      [{ id: 'bot-b', name: 'Beta' }],
+    )).toBeNull();
   });
 
   it('prioritizes needs-user over running and keeps terminal states explicit', () => {

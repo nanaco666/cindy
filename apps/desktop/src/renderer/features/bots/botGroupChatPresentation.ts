@@ -1,3 +1,7 @@
+import type { AgentInputReference } from '@cindy/maker-shared/agent-input-projection';
+
+import type { Message } from '@/lib/ccAgent.types';
+import type { ComposerBotMention } from '@/lib/fileTypes';
 import type { BotGroupRoomProjection } from '../../../shared/botGroupChat';
 
 type GroupMessageLike = {
@@ -9,6 +13,42 @@ type GroupMessageLike = {
 export type PresentedBotGroupMessage =
   | { kind: 'user'; name: string; text: string; threadId: string; attachments: string[] }
   | { kind: 'bot'; botId: string; name: string; text: string; threadId: string; attachments: string[] };
+
+export function presentedRoomMessages(messages: readonly Message[]): Array<{
+  id: string;
+  createdAt: string;
+  value: PresentedBotGroupMessage;
+}> {
+  return [...messages]
+    .sort((left, right) => {
+      if (left.rowid !== undefined && right.rowid !== undefined) {
+        return left.rowid - right.rowid;
+      }
+      const byCreatedAt = left.createdAt.localeCompare(right.createdAt);
+      return byCreatedAt || left.id.localeCompare(right.id);
+    })
+    .flatMap((message) => {
+      const value = presentBotGroupMessage(message);
+      return value ? [{ id: message.id, createdAt: message.createdAt, value }] : [];
+    });
+}
+
+export function normalizeBotGroupReferences(
+  message: string,
+  references: readonly AgentInputReference[] | undefined,
+  members: readonly ComposerBotMention[],
+): string | null {
+  if (!references?.length) return message;
+  const botReferences = references.filter((reference) => reference.kind === 'bot');
+  if (botReferences.length !== references.length) return null;
+  const memberIds = new Set(members.map((member) => member.id));
+  let normalized = message;
+  for (const reference of [...botReferences].sort((left, right) => right.start - left.start)) {
+    if (reference.kind !== 'bot' || !memberIds.has(reference.botId)) return null;
+    normalized = `${normalized.slice(0, reference.start)}@${reference.name}${normalized.slice(reference.end)}`;
+  }
+  return normalized;
+}
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)

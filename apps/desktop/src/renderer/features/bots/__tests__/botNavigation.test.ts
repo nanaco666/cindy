@@ -1,8 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { shouldDeferCanonicalBotSessionNavigation } from '../botNavigation';
+import {
+  BotCanonicalSessionCreateTimeoutError,
+  createBotCanonicalSessionWithRetry,
+  isRetryableBotCanonicalSessionCreateError,
+  shouldDeferCanonicalBotSessionNavigation,
+  withBotCanonicalSessionReadTimeout,
+} from '../botNavigation';
 
 describe('shouldDeferCanonicalBotSessionNavigation', () => {
   it.each([
@@ -22,6 +28,57 @@ describe('shouldDeferCanonicalBotSessionNavigation', () => {
         addRequested: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe('Bot canonical Session creation retry', () => {
+  it('retries a transient local DB readiness failure', async () => {
+    const create = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(new Error('DbClient not ready'))
+      .mockResolvedValueOnce('session-1');
+
+    await expect(
+      createBotCanonicalSessionWithRetry(create, {
+        retryDelaysMs: [0],
+        wait: async () => undefined,
+      }),
+    ).resolves.toBe('session-1');
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(isRetryableBotCanonicalSessionCreateError(new Error('DbClient not ready'))).toBe(true);
+  });
+
+  it('bounds a hung IPC attempt before retrying it', async () => {
+    const create = vi
+      .fn<() => Promise<string>>()
+      .mockImplementationOnce(() => new Promise(() => undefined))
+      .mockResolvedValueOnce('session-1');
+
+    await expect(
+      createBotCanonicalSessionWithRetry(create, {
+        attemptTimeoutMs: 1,
+        retryDelaysMs: [0],
+        wait: async () => undefined,
+      }),
+    ).resolves.toBe('session-1');
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces a timeout after the bounded retry budget is exhausted', async () => {
+    const create = vi.fn<() => Promise<string>>(() => new Promise(() => undefined));
+
+    await expect(
+      createBotCanonicalSessionWithRetry(create, {
+        attemptTimeoutMs: 1,
+        retryDelaysMs: [],
+      }),
+    ).rejects.toBeInstanceOf(BotCanonicalSessionCreateTimeoutError);
+  });
+
+  it('bounds a canonical session metadata read', async () => {
+    await expect(
+      withBotCanonicalSessionReadTimeout(() => new Promise(() => undefined), 1),
+    ).rejects.toBeInstanceOf(BotCanonicalSessionCreateTimeoutError);
   });
 });
 
@@ -53,6 +110,24 @@ describe('阵容是主区的一页,不是模态', () => {
   it('侧栏所有「加一个」的入口都走同一条路由', () => {
     expect(sidebar).not.toContain('?add=1');
     expect(sidebar.match(/navigate\('\/bots\/roster'\)/g)?.length).toBe(3);
+  });
+});
+
+describe('Bot task creation cannot leave navigation permanently gated', () => {
+  const home = readFileSync(resolve(__dirname, '..', 'BotsHomeView.tsx'), 'utf8');
+
+  it('releases the in-flight attempt token when the settings route takes over', () => {
+    expect(home).toContain('creatingBotRef.current?.token === attemptToken');
+    expect(home).toContain('creatingBotRef.current = null');
+  });
+
+  it('retries canonical creation instead of renewing a missing Session', () => {
+    expect(home).toContain('retryCanonicalSessionCreation(selectedBot)');
+    expect(home).not.toContain('onClick={() => void renewBotSession(selectedBot)}');
+  });
+
+  it('does not gate canonical navigation on a separate hydration flag', () => {
+    expect(home).not.toContain('renewCheckedBotId !== selectedBot.id');
   });
 });
 

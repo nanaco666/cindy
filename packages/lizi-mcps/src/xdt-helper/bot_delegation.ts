@@ -82,7 +82,7 @@ export function registerBotDelegationTools(
     description: [
       '把一个有界目标委派给另一个 Cindy Bot。目标在独立子任务中使用自己的 Profile、Skills、MCP、Memory 与项目/worktree 策略运行，完成后结果会自动回到当前任务。',
       '默认 max_depth=1，保持 Hermes 式扁平委派；只有明确需要编排型子 Bot 时才提高 max_depth。禁止循环；同一 Bot 默认最多 10 个进行中的委派。',
-      '只传必要上下文引用，不复制父任务全部历史。budget_tokens 与 timeout_ms 是持久执行边界。',
+      '只传必要上下文引用，不复制父任务全部历史。budget_tokens 与 timeout_ms 是持久执行边界。普通研究、代码修改或需要启动 Agent 的工作不要填写 timeout_ms，省略后使用 30 分钟默认值；只有用户明确要求更短或更长的截止时间时才填写。',
     ].join('\n'),
     inputShape: {
       target_bot_id: z.string().min(1).max(128),

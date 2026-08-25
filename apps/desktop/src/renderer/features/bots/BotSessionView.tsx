@@ -88,7 +88,10 @@ export function BotSessionView() {
   );
   const [reloadVersion, setReloadVersion] = useState(0);
   const [gate, setGate] = useState<BotSessionGate>({ kind: 'loading' });
-  const [automationPanelVisible, setAutomationPanelVisible] = useState(true);
+  // The automation panel is an auxiliary surface, not the primary Bot chat.
+  // Keep it collapsed on entry so the user does not have to close it every
+  // time; the header toggle still opens it on demand.
+  const [automationPanelVisible, setAutomationPanelVisible] = useState(false);
   const [automationDrawerOpen, setAutomationDrawerOpen] = useState(false);
   const [automationWide, setAutomationWide] = useState(automationWideNow);
 

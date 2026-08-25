@@ -38,8 +38,20 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => mocks.navigate }));
 vi.mock('../BotAvatar', () => ({
   BotAvatar: ({ bot }: { bot: { name: string } }) => <span data-avatar={bot.name} />,
 }));
+vi.mock('@/components/new-chat/ModelSelector', () => ({
+  ModelSelector: () => <div data-testid="model-selector" />,
+}));
 vi.mock('../botStore', () => ({
   exportBotBundle: (...args: unknown[]) => mocks.exportBotBundle(...(args as [string])),
+  getBotGlobalModelOverride: () => null,
+  getEffectiveBotModelSettings: () => ({
+    model: 'default-model',
+    providerId: null,
+    effort: '',
+    fastMode: false,
+  }),
+  setBotGlobalModelOverride: vi.fn(),
+  subscribeBotGlobalModel: () => () => {},
   useBotProfiles: () => mocks.profiles,
 }));
 

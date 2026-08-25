@@ -39,6 +39,7 @@ import {
   refreshBotProfiles,
   useBotProfiles,
   defaultBotModel,
+  getEffectiveBotModelSettings,
   exportBotBundle,
   importBotBundle,
   type BotCapabilities,
@@ -52,7 +53,11 @@ import { BotRosterView } from './BotRosterView';
 import { BotAvatar, BotAvatarPicker } from './BotAvatar';
 import { BotCapabilitySettings } from './BotCapabilitySettings';
 import { BotProjectSettings } from './BotProjectSettings';
-import { shouldDeferCanonicalBotSessionNavigation } from './botNavigation';
+import {
+  createBotCanonicalSessionWithRetry,
+  shouldDeferCanonicalBotSessionNavigation,
+  withBotCanonicalSessionReadTimeout,
+} from './botNavigation';
 import { BotRouteSettings } from './BotRouteSettings';
 import { BotLifecycleSettings } from './BotLifecycleSettings';
 import { BotEventInboxSettings } from './BotEventInboxSettings';
@@ -847,6 +852,7 @@ export function BotSettings({
                             ...current,
                             harness: next === 'cc' ? 'claude' : next,
                             model,
+                            modelOverride: null,
                             // 来源必须与模型同源,否则会拿一个来源去解析另一个来源的 id。
                             providerId: model === prefs.model ? (prefs.providerId ?? null) : null,
                             effort: prefs.effort,
@@ -859,7 +865,8 @@ export function BotSettings({
                     </div>
                     <div className="flex min-w-0 flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
                       <span>{t('bots.modelLabel')}</span>
-                      <ModelSelector
+                      <div className="flex items-center gap-2">
+                        <ModelSelector
                         modelId={capabilities.model}
                         effort={capabilities.effort}
                         vendorKey={vendor}
@@ -875,20 +882,71 @@ export function BotSettings({
                             ? undefined
                             : (enabled) => updateCapability('fastMode', enabled)
                         }
-                        onModelChange={(model) => updateCapability('model', model)}
-                        onEffortChange={(effort) => updateCapability('effort', effort)}
+                        onModelChange={(model) => {
+                          updateCapability('model', model);
+                          setCapabilities((current) => ({
+                            ...current,
+                            model,
+                            modelOverride: {
+                              model,
+                              providerId: current.providerId ?? null,
+                              effort: current.effort,
+                              fastMode: current.fastMode,
+                            },
+                          }));
+                        }}
+                        onEffortChange={(effort) => {
+                          updateCapability('effort', effort);
+                          setCapabilities((current) => ({
+                            ...current,
+                            effort,
+                            modelOverride: {
+                              model: current.model,
+                              providerId: current.providerId ?? null,
+                              effort,
+                              fastMode: current.fastMode,
+                            },
+                          }));
+                        }}
                         onProviderChange={(providerId, model, effort) => {
                           setCapabilities((current) => ({
                             ...current,
                             providerId,
                             model: model ?? current.model,
                             effort: effort || current.effort,
+                            modelOverride: {
+                              model: model ?? current.model,
+                              providerId,
+                              effort: effort || current.effort,
+                              fastMode: current.fastMode,
+                            },
                           }));
                           autosave.onEdit('instant');
                         }}
                         onNavigateToProviders={() => navigate('/settings?tab=providers')}
                         unknownModelLabel={(model) => t('bots.modelUnavailable', { model })}
-                      />
+                        />
+                        {capabilities.modelOverride ? (
+                          <button
+                            type="button"
+                            className="shrink-0 text-11 text-[var(--text-tertiary)] underline-offset-2 hover:text-[var(--text-primary)] hover:underline"
+                            onClick={() => {
+                              const resolved = getEffectiveBotModelSettings(vendor, null);
+                              setCapabilities((current) => ({
+                                ...current,
+                                model: resolved.model,
+                                providerId: resolved.providerId,
+                                effort: resolved.effort,
+                                fastMode: resolved.fastMode,
+                                modelOverride: null,
+                              }));
+                              autosave.onEdit('instant');
+                            }}
+                          >
+                            {t('settings.defaults.restore')}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                   <BotCapabilitySettings
@@ -1200,7 +1258,7 @@ export function BotsHomeView() {
   const { botId, sessionId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const bots = useBotProfiles();
-  const creatingBotRef = useRef<string | null>(null);
+  const creatingBotRef = useRef<{ botId: string; token: symbol } | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [createSessionError, setCreateSessionError] = useState<unknown>(null);
   const importingRef = useRef(false);
@@ -1219,12 +1277,14 @@ export function BotsHomeView() {
     ): Promise<import('@/lib/ccAgent.types').Session> => {
       try {
         setCreateSessionError(null);
-        const result = await window.electronAPI.localDb.bots.createCanonicalSession({
-          botId: bot.id,
-          expectedCanonicalSessionId,
-          expectedProfileVersion: bot.currentVersion ?? 1,
-          recoverMissingOnly,
-        });
+        const result = await createBotCanonicalSessionWithRetry(() =>
+          window.electronAPI.localDb.bots.createCanonicalSession({
+            botId: bot.id,
+            expectedCanonicalSessionId,
+            expectedProfileVersion: bot.currentVersion ?? 1,
+            recoverMissingOnly,
+          }),
+        );
         const updated = result.session;
         setCanonicalBotSession(bot.id, {
           id: updated.id,
@@ -1259,6 +1319,24 @@ export function BotsHomeView() {
         // The settings view remains mounted and can surface a localized error.
         return false;
       } finally {
+        setIsCreatingSession(false);
+      }
+    },
+    [createCanonicalSession, navigate],
+  );
+
+  const retryCanonicalSessionCreation = useCallback(
+    async (bot: BotProfile): Promise<void> => {
+      creatingBotRef.current = null;
+      setCreateSessionError(null);
+      setIsCreatingSession(true);
+      try {
+        const session = await createCanonicalSession(bot);
+        navigate(`/bots/${bot.id}/session/${session.id}`, { replace: true });
+      } catch {
+        // createCanonicalSession stores the actual IPC error for the error state.
+      } finally {
+        creatingBotRef.current = null;
         setIsCreatingSession(false);
       }
     },
@@ -1344,32 +1422,6 @@ export function BotsHomeView() {
       });
   }, [navigate, searchParams, setSearchParams, t]);
 
-  /*
-    到点换代:打开伙伴主对话之前先问一次「该翻篇了吗」。
-
-    放在导航**之前**而不是之后 —— 换代成功会换一条主对话,后问的话用户会先被
-    送进昨天那段、再被拽到新的一段,白闪一下。判定是本地一次 SQLite 查询,
-    这点等待换不来任何可感知的延迟。
-
-    每个伙伴每次打开只问一次:问完把 id 记下来,否则换代后 store 刷新触发
-    effect 重跑,又会对着刚建好的新对话再问一遍。
-    整条链失败一律当「没换」——换代是锦上添花,不该让人连伙伴都打不开。
-  */
-  const [renewCheckedBotId, setRenewCheckedBotId] = useState<string | null>(null);
-  useEffect(() => {
-    if (
-      !selectedBot ||
-      shouldDeferCanonicalBotSessionNavigation({ settingsOpen, addRequested }) ||
-      selectedBot.status !== 'active' ||
-      renewCheckedBotId === selectedBot.id
-    )
-      return;
-    // Hermes semantics: opening a Bot never silently swaps its canonical Chat.
-    // Context compaction is explicit through the Bot lifecycle action; this
-    // guard only keeps the navigation effect deterministic during hydration.
-    setRenewCheckedBotId(selectedBot.id);
-  }, [selectedBot, settingsOpen, addRequested, renewCheckedBotId]);
-
   useEffect(() => {
     if (!selectedBot || shouldDeferCanonicalBotSessionNavigation({ settingsOpen, addRequested }))
       return;
@@ -1378,15 +1430,11 @@ export function BotsHomeView() {
       return;
     }
 
-    // 换代检查没落地就先别导航 —— 否则会先进旧对话再被换代拽走。
-    if (renewCheckedBotId !== selectedBot.id) return;
-
     const canonicalSessionId = canonicalBotSessionId(selectedBot);
     let cancelled = false;
     if (canonicalSessionId) {
       setIsCreatingSession(false);
-      void sessionService
-        .get(canonicalSessionId)
+      void withBotCanonicalSessionReadTimeout(() => sessionService.get(canonicalSessionId))
         .then(async (session) => {
           if (cancelled) return;
           if (session.status !== 'active') {
@@ -1434,33 +1482,45 @@ export function BotsHomeView() {
             if (next) navigate(`/bots/${selectedBot.id}/session/${next.id}`, { replace: true });
           }
         });
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
-    if (sessionId || creatingBotRef.current === selectedBot.id) return;
+    if (sessionId || creatingBotRef.current?.botId === selectedBot.id) return;
 
-    creatingBotRef.current = selectedBot.id;
+    const attemptToken = Symbol('bot-canonical-create');
+    creatingBotRef.current = { botId: selectedBot.id, token: attemptToken };
     setIsCreatingSession(true);
     void createCanonicalSession(selectedBot)
       .then((session) => {
         if (cancelled) return;
-        setIsCreatingSession(false);
-        if (!session) {
-          creatingBotRef.current = null;
-          return;
-        }
         navigate(`/bots/${selectedBot.id}/session/${session.id}`, { replace: true });
       })
       .catch(() => {
         if (cancelled) return;
-        setIsCreatingSession(false);
-        creatingBotRef.current = null;
+      })
+      .finally(() => {
+        if (creatingBotRef.current?.token === attemptToken) {
+          creatingBotRef.current = null;
+        }
+        if (!cancelled) setIsCreatingSession(false);
       });
 
     return () => {
       cancelled = true;
+      if (creatingBotRef.current?.token === attemptToken) {
+        creatingBotRef.current = null;
+      }
     };
-  }, [addRequested, createCanonicalSession, selectedBot, sessionId, settingsOpen, navigate]);
+  }, [
+    addRequested,
+    createCanonicalSession,
+    selectedBot,
+    sessionId,
+    settingsOpen,
+    navigate,
+  ]);
 
   if (!selectedBot) {
     // 一个伙伴都没有 → 主区直接就是阵容页,没有中间那一层。
@@ -1534,7 +1594,7 @@ export function BotsHomeView() {
           {!importNotice && selectedBot ? (
             <button
               type="button"
-              onClick={() => void renewBotSession(selectedBot)}
+              onClick={() => void retryCanonicalSessionCreation(selectedBot)}
               className="h-8 rounded-full border border-[var(--border-default)] px-4 text-12 text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
             >
               {t('commonUi.retry')}

@@ -10,14 +10,15 @@ import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { useAttachments } from '@/hooks/useAttachments';
 import type { Message } from '@/lib/ccAgent.types';
 import * as messageService from '@/lib/messageService';
+import * as sessionService from '@/lib/sessionService';
 import { serializeAttachedFiles } from '@/lib/messageAttachmentPayload';
 import { cn } from '@/lib/utils';
 import { BotAvatar } from './BotAvatar';
 import { BotGroupInteractionPanel } from './BotGroupInteractionPanel';
 import {
   botGroupRoomState,
-  presentBotGroupMessage,
-  type PresentedBotGroupMessage,
+  normalizeBotGroupReferences,
+  presentedRoomMessages,
 } from './botGroupChatPresentation';
 import {
   archiveBotGroupRoom,
@@ -29,20 +30,9 @@ import type { BotGroupRoomProjection } from '../../../shared/botGroupChat';
 
 type RoomLoadState =
   | { kind: 'loading' }
-  | { kind: 'ready'; room: BotGroupRoomProjection; messages: Message[] }
+  | { kind: 'ready'; room: BotGroupRoomProjection; roomSession: Awaited<ReturnType<typeof sessionService.get>>; messages: Message[] }
   | { kind: 'missing' }
   | { kind: 'error'; message: string };
-
-function presentedRoomMessages(messages: readonly Message[]): Array<{
-  id: string;
-  createdAt: string;
-  value: PresentedBotGroupMessage;
-}> {
-  return messages.flatMap((message) => {
-    const value = presentBotGroupMessage(message);
-    return value ? [{ id: message.id, createdAt: message.createdAt, value }] : [];
-  });
-}
 
 export function BotGroupRoomView() {
   const { t } = useTranslation();
@@ -73,8 +63,11 @@ export function BotGroupRoomView() {
         setState({ kind: 'missing' });
         return;
       }
-      const messages = await messageService.list(room.roomSessionId, { limit: 300 });
-      setState({ kind: 'ready', room, messages });
+      const [messages, roomSession] = await Promise.all([
+        messageService.list(room.roomSessionId, { limit: 300 }),
+        sessionService.get(room.roomSessionId),
+      ]);
+      setState({ kind: 'ready', room, roomSession, messages });
     } catch (error) {
       setState({
         kind: 'error',
@@ -108,6 +101,18 @@ export function BotGroupRoomView() {
     [state],
   );
   const activeInteraction = state.kind === 'ready' ? state.room.interactions?.[0] : undefined;
+
+  const applyRoomRuntimePatch = useCallback(
+    async (patch: Parameters<typeof sessionService.update>[1]) => {
+      if (state.kind !== 'ready') return;
+      const next = await sessionService.update(state.room.roomSessionId, patch);
+      setState((current) => (current.kind !== 'ready' ? current : { ...current, roomSession: next }));
+      await Promise.all(
+        state.room.members.map((member) => sessionService.update(member.sessionId, patch)),
+      );
+    },
+    [state],
+  );
 
   const openManagement = () => {
     if (state.kind !== 'ready') return;
@@ -339,21 +344,70 @@ export function BotGroupRoomView() {
           {!activeInteraction ? <ChatInput
             sessionId={room.roomSessionId}
             draftKey={`bot-group:${room.id}`}
-            runtimeAgentKind={null}
-            settingsLocked
+            runtimeAgentKind={
+              state.roomSession.agentKind === 'codex'
+                ? 'codex'
+                : state.roomSession.agentKind === 'pi'
+                  ? 'pi'
+                  : 'claude-code'
+            }
+            vendorKey={
+              state.roomSession.agentKind === 'codex'
+                ? 'codex'
+                : state.roomSession.agentKind === 'pi'
+                  ? 'pi'
+                  : 'cc'
+            }
+            initialModel={state.roomSession.model}
+            initialEffort={state.roomSession.effort as never}
+            initialProviderId={state.roomSession.providerId ?? null}
+            fastMode={state.roomSession.fastMode}
             showFolderPicker={false}
             disabled={room.status !== 'active'}
             attachmentState={attachmentState}
             messages={messages.map(({ value }) => ({ role: value.kind === 'user' ? 'user' : 'assistant', content: value.text }))}
+            botMentions={room.members.map((member) => {
+              const profile = memberBots.find((bot) => bot.id === member.botId);
+              return {
+                id: member.botId,
+                name: member.name,
+                ...(profile?.description ? { description: profile.description } : {}),
+              };
+            })}
             placeholder={t('bots.groups.placeholder')}
+            onModelDidChange={(model) => {
+              void applyRoomRuntimePatch({ model });
+            }}
+            onEffortDidChange={(effort) => {
+              void applyRoomRuntimePatch({ effort });
+            }}
+            onProviderDidChange={(providerId) => {
+              void applyRoomRuntimePatch({ providerId });
+            }}
+            onFastModeChange={(enabled) => {
+              void applyRoomRuntimePatch({ fastMode: enabled });
+            }}
             onSend={async (message, _model, _effort, _permission, files, mentions, opts) => {
-              if ((mentions?.length ?? 0) > 0 || (opts?.agentReferences?.length ?? 0) > 0) {
+              if ((mentions?.length ?? 0) > 0) {
+                setSendError(t('bots.groups.referencesUnsupported'));
+                return false;
+              }
+              const groupMentions = room.members.map((member) => ({
+                id: member.botId,
+                name: member.name,
+              }));
+              const normalizedMessage = normalizeBotGroupReferences(
+                message,
+                opts?.agentReferences,
+                groupMentions,
+              );
+              if (normalizedMessage === null) {
                 setSendError(t('bots.groups.referencesUnsupported'));
                 return false;
               }
               setSendError(null);
               try {
-                await window.electronAPI.maker.botGroups.send(room.id, message, {
+                await window.electronAPI.maker.botGroups.send(room.id, normalizedMessage, {
                   ...(replyThreadId ? { threadId: replyThreadId } : {}),
                   ...(files?.length ? { files: serializeAttachedFiles(files) } : {}),
                 });

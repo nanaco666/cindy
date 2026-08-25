@@ -100,8 +100,13 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('Bot canonical Chat automation surface', () => {
-  it('shows the current Bot automation panel on wide screens and toggles it from the header event', async () => {
+  it('keeps the Bot automation panel collapsed by default and opens it from the header event', async () => {
     render(<BotSessionView />);
+
+    await waitFor(() => expect(screen.getByTestId('chat')).toBeTruthy());
+    expect(screen.queryByTestId('bot-automation-panel')).toBeNull();
+
+    act(() => window.dispatchEvent(new CustomEvent(BOT_AUTOMATION_TOGGLE_EVENT)));
 
     await waitFor(() => expect(screen.getByTestId('bot-automation-panel')).toBeTruthy());
     expect(screen.getByTestId('automation-settings').textContent).toBe('bot-1:panel');
@@ -138,7 +143,7 @@ describe('Bot canonical Chat automation surface', () => {
     });
 
     await waitFor(() => expect(screen.queryByTestId('bot-automation-drawer')).toBeNull());
-    expect(screen.getByTestId('bot-automation-panel')).toBeTruthy();
+    expect(screen.queryByTestId('bot-automation-panel')).toBeNull();
   });
 
   it('does not expose automation on a non-canonical route task', async () => {

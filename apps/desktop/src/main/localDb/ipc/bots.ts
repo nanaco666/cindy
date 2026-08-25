@@ -540,6 +540,13 @@ async function readProfile(
       : [],
     capabilities: {
       model: typeof config.model === 'string' ? config.model : 'claude-sonnet-4-6',
+      // Renderer treats this as the source-of-truth marker: null means the
+      // concrete model above is only a resolved cache and must follow the
+      // current Gateway/Catalog default.
+      modelOverride:
+        config.modelOverride && typeof config.modelOverride === 'object'
+          ? config.modelOverride
+          : null,
       providerId:
         typeof config.providerId === 'string'
           ? config.providerId
