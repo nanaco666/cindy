@@ -56,6 +56,11 @@ export interface BotDirectMessageServiceDeps {
     persistedContent?: string;
     clientId?: string;
   }) => Promise<DispatchResult>;
+  /** Reuses delegation's canonical-session ensure path for newly-created/recovering Bots. */
+  ensureCanonicalSession?: (botId: string) => Promise<
+    | { ok: true; sessionId: string }
+    | { ok: false; errorCode: string; message: string }
+  >;
   createId?: () => string;
 }
 
@@ -186,7 +191,13 @@ export function createBotDirectMessageService(deps: BotDirectMessageServiceDeps)
     }
 
     const target = await loadTargetCanonicalSession(input.targetBotId);
-    if (!target) {
+    let targetSessionId = target?.sessionId ?? null;
+    if (!targetSessionId && deps.ensureCanonicalSession) {
+      const ensured = await deps.ensureCanonicalSession(input.targetBotId);
+      if (ensured.ok) targetSessionId = ensured.sessionId;
+      else return failed(ensured.errorCode, ensured.message, true);
+    }
+    if (!targetSessionId) {
       return failed('TARGET_CANONICAL_UNAVAILABLE', '目标 Bot 没有可用的主任务', true);
     }
 
@@ -197,7 +208,7 @@ export function createBotDirectMessageService(deps: BotDirectMessageServiceDeps)
       message,
     ].join('\n\n');
     const dispatched = await deps.dispatch({
-      targetSessionId: target.sessionId,
+      targetSessionId,
       message: envelope,
       persistedContent: envelope,
       clientId: `bot-dm:${caller.botId}:${createId()}`,

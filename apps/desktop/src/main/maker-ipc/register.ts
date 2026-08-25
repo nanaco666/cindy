@@ -10528,6 +10528,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
   botDirectMessageServiceHolder = createBotDirectMessageService({
     dispatch: ({ targetSessionId, message, persistedContent, clientId }) =>
       dispatchBotSessionMessage({ targetSessionId, message, persistedContent, clientId }),
+    ensureCanonicalSession: async (botId) => {
+      if (!botDelegationServiceHolder) {
+        return { ok: false as const, errorCode: 'DELEGATION_UNAVAILABLE', message: 'Bot 委派服务尚未就绪' };
+      }
+      return botDelegationServiceHolder.ensureCanonicalSession(botId);
+    },
   });
   botGroupChatServiceHolder?.dispose();
   botGroupChatServiceHolder = createBotGroupChatService({

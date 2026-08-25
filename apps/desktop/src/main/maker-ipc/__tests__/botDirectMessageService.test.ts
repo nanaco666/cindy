@@ -169,6 +169,22 @@ describe('botDirectMessageService', () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it('ensures a missing target canonical task before sending a direct Bot DM', async () => {
+    const ensureCanonicalSession = vi.fn(async () => ({ ok: true as const, sessionId: 'b-created' }));
+    dispatch.mockResolvedValueOnce({
+      ok: true as const,
+      targetSessionId: 'b-created',
+      wakeKind: 'created' as const,
+    });
+    const result = await createBotDirectMessageService({ dispatch, ensureCanonicalSession }).messageAgent({
+      callerSessionId: 'a-main',
+      targetBotId: 'bot-missing',
+      message: '请上线一个主任务。',
+    });
+    expect(ensureCanonicalSession).toHaveBeenCalledWith('bot-missing');
+    expect(result).toMatchObject({ ok: true, targetSessionId: 'b-created', wakeKind: 'created' });
+  });
+
   it('returns dispatch failures without pretending the DM was accepted', async () => {
     dispatch.mockResolvedValueOnce({
       ok: false,

@@ -3089,6 +3089,17 @@ export function createBotDelegationService(deps: BotDelegationServiceDeps) {
   return {
     listBots,
     delegateToBot,
+    ensureCanonicalSession: async (botId: string) => {
+      const [profile] = await getDbClient().drizzle
+        .select({ id: botProfiles.id, currentVersion: botProfiles.currentVersion, status: botProfiles.status })
+        .from(botProfiles)
+        .where(eq(botProfiles.id, botId))
+        .limit(1);
+      if (!profile || profile.status !== 'active') {
+        return { ok: false as const, errorCode: 'TARGET_BOT_INACTIVE', message: '目标 Bot 已暂停或归档' };
+      }
+      return ensureTargetCanonicalSession({ id: profile.id, currentVersion: profile.currentVersion });
+    },
     listDelegations,
     cancelDelegation,
     interjectDelegation,
