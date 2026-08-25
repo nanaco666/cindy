@@ -156,6 +156,7 @@ describe('buildMainListEntries — 混排(recency)', () => {
       unreadRunIds: [],
       hasUnreadRun: false,
       hasUnreadFailedRun: false,
+      unreadFailedRunIds: [],
     };
 
     const entries = buildMainListEntries({
@@ -203,6 +204,7 @@ describe('buildMainListEntries — 混排(recency)', () => {
       unreadRunIds: [],
       hasUnreadRun: false,
       hasUnreadFailedRun: false,
+      unreadFailedRunIds: [],
     };
 
     const entries = buildMainListEntries({
@@ -256,6 +258,7 @@ describe('buildMainListEntries — 混排(recency)', () => {
       unreadRunIds: [],
       hasUnreadRun: false,
       hasUnreadFailedRun: false,
+      unreadFailedRunIds: [],
     };
 
     const entries = buildMainListEntries({
@@ -305,6 +308,7 @@ describe('buildMainListEntries — 混排(recency)', () => {
           scheduleId: 'shared-schedule-id',
           scheduleName: '远程自动检查',
           unreadRunIds: [],
+          unreadFailedRunIds: [],
           hasUnreadRun: false,
           hasUnreadFailedRun: false,
         },

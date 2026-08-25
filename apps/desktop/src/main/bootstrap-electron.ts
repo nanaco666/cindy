@@ -1593,6 +1593,14 @@ async function teardownAuthAccountBoundary(reason: string): Promise<void> {
     // 后续 owner 的正常收尾写全部吞掉,中断横幅会在每个正常完成的任务上误弹。
     const releaseEndedSuppression = beginSessionTurnEndedSuppression();
     try {
+      // GoalController captures the Maker and owner DB at construction time.
+      // Dispose it before replacing the Maker so a relogin cannot dispatch
+      // goals through a shutting-down runtime from the previous account.
+      try {
+        await resetGoalController();
+      } catch (err) {
+        authBoundaryLog.error(`resetGoalController on ${reason} failed (non-fatal):`, err);
+      }
     // Same fence, same ordering argument, as quit and the update relaunch: raised
     // before `maker.shutdown` so it covers the shutdown *and* the sweep below.
     // `Maker.shutdown` reports per-session detach failures rather than throwing,
@@ -1926,7 +1934,7 @@ function isIOSSimulatorPluginActive(ghosts = getGhostManager().list()): boolean 
   return ghosts.some(
     (ghost) =>
       ghost.enabled === true &&
-      ghost.manifest.slots.includes('ios-simulator') &&
+      ghost.manifest.iosSimulator === true &&
       isGhostAvailableForActiveSession(ghost.manifest.id),
   );
 }
@@ -3099,6 +3107,7 @@ app.on('browser-window-focus', (_event, win) => {
   const focusedAppContent = isAppContentWindow(win);
   syncAppFocusState(focusedAppContent);
   if (focusedAppContent) {
+    syncPluginMarketForActiveOwner(30_000);
     // OAuth and system settings may complete outside Cindy. Focus is a
     // metadata-only fallback wake-up: each pending plugin is re-assessed, but
     // no stored value crosses the change bus.
@@ -3725,6 +3734,32 @@ const createWindow = () => {
 
 let disposeSkillhubAutoSyncAuthListener: (() => void) | null = null;
 let disposeProviderAccessAuthListener: (() => void) | null = null;
+let pluginMarketSyncInFlightScope: string | null = null;
+let lastPluginMarketSyncScope: string | null = null;
+let lastPluginMarketSyncAt = 0;
+let pluginMarketPeriodicSyncTimer: ReturnType<typeof setInterval> | null = null;
+const PLUGIN_MARKET_PERIODIC_SYNC_MS = 30 * 60 * 1000;
+
+/** Run market discovery and automatic updates for the current stable owner. */
+function syncPluginMarketForActiveOwner(minIntervalMs = 0): void {
+  const session = getActiveAppSession();
+  if (!session.dataOwnerId || isAppSessionBoundaryPending()) return;
+  const scope = activeOwnerScopeKey();
+  if (scope === pluginMarketSyncInFlightScope) return;
+  const now = Date.now();
+  if (
+    scope === lastPluginMarketSyncScope &&
+    now - lastPluginMarketSyncAt < minIntervalMs
+  ) {
+    return;
+  }
+  pluginMarketSyncInFlightScope = scope;
+  lastPluginMarketSyncScope = scope;
+  lastPluginMarketSyncAt = now;
+  void syncDefaultMarketPlugins().finally(() => {
+    if (pluginMarketSyncInFlightScope === scope) pluginMarketSyncInFlightScope = null;
+  });
+}
 
 function parseOptionalDeviceLinkDeviceId(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
@@ -5964,6 +5999,11 @@ const registerIpcHandlers = () => {
   // 默认插件同步不能依赖用户先打开插件页。启动时本地 owner 已经稳定则立刻
   // 复用市场快照；云端登录/切号的通知可能早于 owner boundary 释放，因此
   // 延迟到当前调用栈结束后再按已提交的新 owner 补跑一次。
+  pluginMarketPeriodicSyncTimer ??= setInterval(
+    () => syncPluginMarketForActiveOwner(PLUGIN_MARKET_PERIODIC_SYNC_MS),
+    PLUGIN_MARKET_PERIODIC_SYNC_MS,
+  );
+  pluginMarketPeriodicSyncTimer.unref();
   // ── Dialog: 目录选择器（v0.6 新增，与旧 show-open-directory-dialog 并存） ──
   ipcMain.handle(
     'dialog:show-open-directory',
@@ -8070,6 +8110,7 @@ app.on('ready', async () => {
   powerMonitor.on('resume', () => {
     authManager.handleResume();
     handleProviderModelSystemResume();
+    syncPluginMarketForActiveOwner(30_000);
     // device-link:睡醒立即重连 relay,不干等退避计时器 + 心跳判死(最坏合计 ~75s)。
     handleDeviceLinkSystemResume();
   });
@@ -8113,6 +8154,14 @@ app.on('ready', async () => {
 // 下方 shutdown-maker 关 session 触发的 markSessionTurnEnded 会把"退出时还在飞
 // 的 turn"伪装成正常收尾,重启后中断卡不出现(只剩硬崩溃能触发)。sync 阶段先于
 // async 的 shutdown-maker,顺序有保证。
+onQuit(
+  'plugin-market-periodic-sync',
+  () => {
+    if (pluginMarketPeriodicSyncTimer) clearInterval(pluginMarketPeriodicSyncTimer);
+    pluginMarketPeriodicSyncTimer = null;
+  },
+  'sync',
+);
 onQuit(
   'session-active-turn-freeze',
   () => {

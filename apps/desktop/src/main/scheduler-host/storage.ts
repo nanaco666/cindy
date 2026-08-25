@@ -54,6 +54,7 @@ export interface ScheduleSidebarIndexRun {
   sessionId?: string;
   status: ScheduleRun['status'];
   readAt?: number;
+  firedAt?: number;
 }
 
 export interface ScheduleCostSummary {
@@ -604,6 +605,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
         sessionId: scheduleRuns.sessionId,
         status: scheduleRuns.status,
         readAt: scheduleRuns.readAt,
+        firedAt: scheduleRuns.firedAt,
       })
       .from(scheduleRuns)
       .innerJoin(schedules, eq(scheduleRuns.scheduleId, schedules.id))
@@ -632,6 +634,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
       sessionId: row.sessionId ?? undefined,
       status: row.status,
       readAt: row.readAt ?? undefined,
+      firedAt: row.firedAt ?? undefined,
     }));
 
     const linkedSessionIds = new Set(
