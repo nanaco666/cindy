@@ -21,7 +21,8 @@ vi.mock('@/features/right-sidebar/lib/openBotArtifactsTab', () => ({ openBotArti
 vi.mock('../feature-context', () => ({ useRegisterContentHeader: () => undefined }));
 vi.mock('../BotAvatar', () => ({ BotAvatar: () => <span data-testid="bot-avatar" /> }));
 
-const { BotSessionContentHeader } = await import('../BotSessionContentHeader');
+const { BOT_AUTOMATION_TOGGLE_EVENT, BotSessionContentHeader } =
+  await import('../BotSessionContentHeader');
 
 const bot = { id: 'bot-1', name: '小可' };
 
@@ -54,6 +55,17 @@ describe('BotSessionContentHeader', () => {
   it('renders no entry without a session id', () => {
     render(<BotSessionContentHeader bot={bot} sessionId={null} />);
     expect(screen.queryByTestId('bot-artifacts-header-entry')).toBeNull();
+  });
+
+  it('uses the shared automation toggle event instead of owning a second panel state', () => {
+    const onToggle = vi.fn();
+    window.addEventListener(BOT_AUTOMATION_TOGGLE_EVENT, onToggle);
+    render(<BotSessionContentHeader bot={bot} sessionId="sess-1" />);
+
+    fireEvent.click(screen.getByTestId('bot-automation-header-entry'));
+
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    window.removeEventListener(BOT_AUTOMATION_TOGGLE_EVENT, onToggle);
   });
 
   it('keeps every colour on semantic tokens so both modes come out right', () => {

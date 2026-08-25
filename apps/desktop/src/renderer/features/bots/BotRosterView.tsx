@@ -59,6 +59,8 @@ interface BotRosterViewProps {
   onCreated?: (bot: BotProfile) => void;
   /** 宿主页面转交的一句话回执（导入成功 / 导入失败），显示在页头下方。 */
   notice?: string | null;
+  /** 产品入口默认直接创建自己的伙伴；模板只在用户明确要看示例时出现。 */
+  initialView?: 'create' | 'templates';
 }
 
 /**
@@ -76,19 +78,24 @@ async function seedBotMemories(botId: string, entries: readonly BotMemorySeedEnt
   }
 }
 
-export function BotRosterView({ onCreated, notice }: BotRosterViewProps = {}) {
+export function BotRosterView({
+  onCreated,
+  notice,
+  initialView = 'create',
+}: BotRosterViewProps = {}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const bots = useBotProfiles();
-  const [view, setView] = useState<'roster' | 'custom'>('roster');
+  const [view, setView] = useState<'roster' | 'custom'>(
+    initialView === 'templates' ? 'roster' : 'custom',
+  );
   /**
    * 自定义路径的三步。
    *
-   * `ask` 是**默认落点**:进「自己捏一个」先问一句「TA 是谁」,一句话就能换回一份
-   * 完整草稿。`manual` 是原来那张「名字 + 头像」的表,由「跳过,自己写」进入 ——
-   * 它一步没少,只是不再是唯一的路;生成不可用时永远还有它兜着。
+   * `manual` 是产品默认落点：先直接填写身份、职责与协作方式，再设置名称和头像。
+   * `ask` 只在用户明确选择「AI 起草」时出现；模板也只作为可选示例，不抢默认入口。
    */
-  const [customStep, setCustomStep] = useState<'ask' | 'preview' | 'manual'>('ask');
+  const [customStep, setCustomStep] = useState<'ask' | 'preview' | 'manual'>('manual');
   const [roleInput, setRoleInput] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -105,6 +112,9 @@ export function BotRosterView({ onCreated, notice }: BotRosterViewProps = {}) {
    */
   const [pristineDraftName, setPristineDraftName] = useState('');
   const [customName, setCustomName] = useState('');
+  const [customDescription, setCustomDescription] = useState('');
+  const [customIdentity, setCustomIdentity] = useState('');
+  const [customPersonality, setCustomPersonality] = useState('');
   const [customAvatar, setCustomAvatar] = useState<BotAvatarAssignment>(() =>
     botAvatarAssignment(`${Date.now()}:${Math.random()}`),
   );
@@ -115,7 +125,7 @@ export function BotRosterView({ onCreated, notice }: BotRosterViewProps = {}) {
   useEffect(() => {
     if (view !== 'custom') return;
     setError(null);
-    setCustomStep('ask');
+    setCustomStep('manual');
     setGenerateError(null);
     setDraft(null);
     setDraftAvatar(null);
@@ -225,8 +235,10 @@ export function BotRosterView({ onCreated, notice }: BotRosterViewProps = {}) {
     if (!name) return;
     void create(CUSTOM_BOT_TEMPLATE_ID, {
       name,
-      description: '',
-      identitySource: '',
+      description: customDescription.trim(),
+      identitySource: [customIdentity.trim(), customPersonality.trim()]
+        .filter(Boolean)
+        .join('\n\n'),
       avatar: customAvatar.emoji,
       avatarColor: customAvatar.hue,
       template: null,
@@ -292,12 +304,8 @@ export function BotRosterView({ onCreated, notice }: BotRosterViewProps = {}) {
 
   if (view === 'custom' && customStep === 'ask') {
     /*
-      第一步只问一句话。
-
-      「自己捏一个」原本上来就是一张空表:名字、头像,剩下的自己去设置里补。可
-      大多数人心里有的不是名字,是**用途**——「设计师」「能帮我盯娃学习的助理」。
-      所以这一屏把那句用途接下来,换回一份可以改的完整草稿;真想自己写的人,
-      「跳过,自己写」还在原地,一步没多。
+      AI 起草是自由创建里的可选捷径，不是进入创建页后的必经步骤。用户明确选择
+      它时才问一句用途并生成可编辑草稿；退出后仍回到完整手写表单。
     */
     return (
       <main className="h-full overflow-y-auto bg-[var(--surface)]" role="main">
@@ -520,27 +528,78 @@ export function BotRosterView({ onCreated, notice }: BotRosterViewProps = {}) {
             {t('bots.roster.customSubtitle')}
           </p>
 
-          <label className="mt-7 flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
-            {t('bots.roster.customNameLabel')}
-            <input
-              autoFocus
-              value={customName}
-              onChange={(event) => setCustomName(event.target.value)}
-              placeholder={t('bots.roster.customNamePlaceholder')}
-              className="h-9 rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 text-13 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:border-[var(--focus-ring)]"
-              required
+          {/*
+            先写清“这是谁、怎么相处”，再挑名字和脸。角色与性格是伙伴的产品
+            本体，头像只是外观；自由文本是主路径，生成器和模板只是可选辅助。
+          */}
+          <div className="mt-7 flex flex-col gap-4 rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5">
+            <label className="flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
+              {t('bots.descriptionLabel')}
+              <input
+                autoFocus
+                value={customDescription}
+                onChange={(event) => setCustomDescription(event.target.value)}
+                placeholder={t('bots.roster.generate.inputPlaceholder')}
+                className="h-10 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] px-3 text-14 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:border-[var(--focus-ring)]"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
+              {t('bots.background.title')}
+              <textarea
+                value={customIdentity}
+                onChange={(event) => setCustomIdentity(event.target.value)}
+                placeholder={t('bots.background.placeholder')}
+                rows={5}
+                className="resize-y rounded-xl border border-[var(--border-default)] bg-[var(--surface)] px-3 py-2.5 text-13 leading-5 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:border-[var(--focus-ring)]"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
+              {t('bots.persona.title')}
+              <textarea
+                aria-label={t('bots.persona.title')}
+                value={customPersonality}
+                onChange={(event) => setCustomPersonality(event.target.value)}
+                placeholder={t('bots.persona.freeformPlaceholder')}
+                rows={3}
+                className="resize-y rounded-xl border border-[var(--border-default)] bg-[var(--surface)] px-3 py-2.5 text-13 leading-5 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:border-[var(--focus-ring)]"
+              />
+              <span className="text-11 leading-4 text-[var(--text-tertiary)]">
+                {t('bots.persona.freeformHint')}
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-5 flex items-center gap-3">
+            <BotAvatarPicker
+              name={customName}
+              avatar={customAvatar.emoji}
+              avatarColor={customAvatar.hue}
+              onChange={setCustomAvatar}
+              size="lg"
             />
-          </label>
+            <label className="min-w-0 flex-1 text-12 text-[var(--text-secondary)]">
+              <span className="mb-1.5 block">{t('bots.roster.customNameLabel')}</span>
+              <input
+                value={customName}
+                onChange={(event) => setCustomName(event.target.value)}
+                placeholder={t('bots.roster.customNamePlaceholder')}
+                className="h-10 w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 text-14 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:border-[var(--focus-ring)]"
+                required
+              />
+            </label>
+          </div>
 
           {/*
             「挑张脸」是这一步的一半，所以候选直接摊在页面上：八张随包的角色像各占
             一个 56px 格子，点一下就选中。想要 emoji 或换底色的少数人再点最后那格
             打开完整选择器 —— 常见路径零额外点击，能力一件不少。
           */}
-          <div className="mt-5">
-            <p className="text-12 text-[var(--text-secondary)]">
+          <details className="mt-4 rounded-xl border border-[var(--border-default)] px-3 py-2.5">
+            <summary className="cursor-pointer text-12 text-[var(--text-secondary)]">
               {t('bots.roster.customAvatarLabel')}
-            </p>
+            </summary>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {BOT_PRESET_AVATAR_IDS.map((id) => {
                 const selected = selectedPreset === id;
@@ -574,15 +633,8 @@ export function BotRosterView({ onCreated, notice }: BotRosterViewProps = {}) {
                   </button>
                 );
               })}
-              <BotAvatarPicker
-                name={customName}
-                avatar={customAvatar.emoji}
-                avatarColor={customAvatar.hue}
-                onChange={setCustomAvatar}
-                size="lg"
-              />
             </div>
-          </div>
+          </details>
 
           <p className="mt-4 text-11 leading-4 text-[var(--text-tertiary)]">
             {t('bots.roster.customHint')}
@@ -593,22 +645,28 @@ export function BotRosterView({ onCreated, notice }: BotRosterViewProps = {}) {
             </p>
           ) : null}
 
-          <div className="mt-7 flex items-center gap-2">
+          <div className="mt-7 flex flex-wrap items-center gap-2">
             <button
               type="submit"
               disabled={creatingId !== null || customName.trim().length === 0}
               className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-[var(--accent-cta-bg)] px-6 text-12 font-medium text-[var(--accent-pure-cta-fg)] transition-opacity hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
             >
               {creatingId !== null ? <Spinner size={14} /> : null}
-              {/* 自建伙伴还没有性别,按裁决用它自己的名字;名字没填时按钮本来就是禁用的。 */}
-              {t('bots.roster.join', { pronoun: botPronoun('neutral', customName) })}
+              {t('bots.roster.create')}
             </button>
             <button
               type="button"
               onClick={() => setView('roster')}
               className="h-9 rounded-full border border-[var(--border-default)] px-4 text-12 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
             >
-              {t('bots.roster.backToRoster')}
+              {t('bots.roster.showExamples')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCustomStep('ask')}
+              className="h-9 rounded-full px-3 text-12 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+            >
+              {t('bots.roster.generate.action')}
             </button>
           </div>
         </form>

@@ -144,13 +144,21 @@ function RunHistory({
   };
 
   if (loading) {
-    return <p className="py-3 text-11 text-[var(--text-tertiary)]">{t('bots.automations.loading')}</p>;
+    return (
+      <p className="py-3 text-11 text-[var(--text-tertiary)]">{t('bots.automations.loading')}</p>
+    );
   }
   if (error) {
-    return <p className="break-words py-3 text-11 text-[var(--text-danger)] [overflow-wrap:anywhere]">{error}</p>;
+    return (
+      <p className="break-words py-3 text-11 text-[var(--text-danger)] [overflow-wrap:anywhere]">
+        {error}
+      </p>
+    );
   }
   if (runs.length === 0) {
-    return <p className="py-3 text-11 text-[var(--text-tertiary)]">{t('bots.automations.noRuns')}</p>;
+    return (
+      <p className="py-3 text-11 text-[var(--text-tertiary)]">{t('bots.automations.noRuns')}</p>
+    );
   }
 
   return (
@@ -159,16 +167,24 @@ function RunHistory({
         <div key={run.id} className="rounded-lg bg-[var(--surface-chip)] px-3 py-2 text-11">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className={statusTone(run.status)}>{t(`bots.automations.runStatus.${run.status}`)}</span>
+              <span className={statusTone(run.status)}>
+                {t(`bots.automations.runStatus.${run.status}`)}
+              </span>
               <span className="text-[var(--text-tertiary)]">v{run.profileVersion}</span>
             </div>
-            <span className="text-[var(--text-tertiary)]">{formatTime(run.finishedAt ?? run.firedAt)}</span>
+            <span className="text-[var(--text-tertiary)]">
+              {formatTime(run.finishedAt ?? run.firedAt)}
+            </span>
           </div>
           {run.resultText ? (
-            <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-[var(--text-secondary)] [overflow-wrap:anywhere]">{run.resultText}</p>
+            <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-[var(--text-secondary)] [overflow-wrap:anywhere]">
+              {run.resultText}
+            </p>
           ) : null}
           {run.errorMessage ? (
-            <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-[var(--text-danger)] [overflow-wrap:anywhere]">{run.errorMessage}</p>
+            <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-[var(--text-danger)] [overflow-wrap:anywhere]">
+              {run.errorMessage}
+            </p>
           ) : null}
           {run.worktreePath ? (
             <p className="mt-2 break-all text-[var(--text-tertiary)]">
@@ -195,24 +211,33 @@ function RunHistory({
                 run.deliveryDiagnostic.committedFinal
                   ? t('bots.automations.deliveryCommitted')
                   : null,
-              ].filter(Boolean).join(' · ')}
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
           ) : null}
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <span className={statusTone(run.deliveryStatus)}>
-              {t('bots.automations.delivery')}: {t(`bots.automations.deliveryStatus.${run.deliveryStatus}`)}
+              {t('bots.automations.delivery')}:{' '}
+              {t(`bots.automations.deliveryStatus.${run.deliveryStatus}`)}
             </span>
             <span className="flex items-center gap-3">
-              {run.deliveryStatus === 'failed'
-              || run.deliveryStatus === 'dead-letter'
-              || run.deliveryStatus === 'enqueue-failed' ? (
+              {run.deliveryStatus === 'failed' ||
+              run.deliveryStatus === 'dead-letter' ||
+              run.deliveryStatus === 'enqueue-failed' ? (
                 <button
                   type="button"
                   disabled={retryingRunId !== null}
                   onClick={() => void retryDelivery(run)}
                   className="inline-flex items-center gap-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50"
                 >
-                  <span className={retryingRunId === run.id ? 'inline-flex animate-spin motion-reduce:animate-none' : 'inline-flex'}>
+                  <span
+                    className={
+                      retryingRunId === run.id
+                        ? 'inline-flex animate-spin motion-reduce:animate-none'
+                        : 'inline-flex'
+                    }
+                  >
                     <RefreshCcw size={12} />
                   </span>
                   {retryingRunId === run.id
@@ -233,7 +258,9 @@ function RunHistory({
             </span>
           </div>
           {run.deliveryError ? (
-            <p className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-[var(--text-danger)] [overflow-wrap:anywhere]">{run.deliveryError}</p>
+            <p className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-[var(--text-danger)] [overflow-wrap:anywhere]">
+              {run.deliveryError}
+            </p>
           ) : null}
         </div>
       ))}
@@ -313,7 +340,9 @@ function AutomationAdvancedFields({
           >
             <option value="">{t('bots.automations.defaultProject')}</option>
             {projects.map((item) => (
-              <option key={item.id} value={item.id}>{item.workingDir}</option>
+              <option key={item.id} value={item.id}>
+                {item.workingDir}
+              </option>
             ))}
           </select>
         </label>
@@ -326,7 +355,9 @@ function AutomationAdvancedFields({
           >
             <option value="">{t('bots.automations.canonicalTask')}</option>
             {routes.map((item) => (
-              <option key={item.id} value={item.id}>{item.routeKey}</option>
+              <option key={item.id} value={item.id}>
+                {item.routeKey}
+              </option>
             ))}
           </select>
         </label>
@@ -347,7 +378,9 @@ function AutomationAdvancedFields({
           onChange={(event) => onChange({ durableNoteNamespace: event.target.value })}
           className={INPUT_CLASS}
         />
-        <span className="text-[var(--text-tertiary)]">{t('bots.automations.noteNamespaceHint')}</span>
+        <span className="text-[var(--text-tertiary)]">
+          {t('bots.automations.noteNamespaceHint')}
+        </span>
       </label>
 
       <p className="mt-4 text-11 font-medium text-[var(--text-primary)]">
@@ -435,31 +468,33 @@ function AutomationAdvancedFields({
             <span className="text-11 text-[var(--text-tertiary)]">
               {t('bots.automations.noDelegateBots')}
             </span>
-          ) : delegateBots.map((candidate) => {
-            const checked = policy.allowedDelegateBotIds.includes(candidate.id);
-            return (
-              <label
-                key={candidate.id}
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--surface-elevated)] px-2.5 py-2 text-11 text-[var(--text-secondary)]"
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() =>
-                    updatePolicy({
-                      allowedDelegateBotIds: checked
-                        ? policy.allowedDelegateBotIds.filter((id) => id !== candidate.id)
-                        : [...policy.allowedDelegateBotIds, candidate.id],
-                    })
-                  }
-                />
-                {/* Shared mark instead of raw `avatar` text: a Bot on the
+          ) : (
+            delegateBots.map((candidate) => {
+              const checked = policy.allowedDelegateBotIds.includes(candidate.id);
+              return (
+                <label
+                  key={candidate.id}
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--surface-elevated)] px-2.5 py-2 text-11 text-[var(--text-secondary)]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      updatePolicy({
+                        allowedDelegateBotIds: checked
+                          ? policy.allowedDelegateBotIds.filter((id) => id !== candidate.id)
+                          : [...policy.allowedDelegateBotIds, candidate.id],
+                      })
+                    }
+                  />
+                  {/* Shared mark instead of raw `avatar` text: a Bot on the
                     official Cindy avatar stores a sentinel, not a grapheme. */}
-                <BotAvatar bot={candidate} size="sm" className="h-4 w-4 text-11" />
-                <span>{candidate.name}</span>
-              </label>
-            );
-          })}
+                  <BotAvatar bot={candidate} size="sm" className="h-4 w-4 text-11" />
+                  <span>{candidate.name}</span>
+                </label>
+              );
+            })
+          )}
         </div>
       ) : null}
     </div>
@@ -609,7 +644,9 @@ function AutomationForm({
       ) : null}
 
       {error ? (
-        <p className="mt-3 break-words text-11 text-[var(--text-danger)] [overflow-wrap:anywhere]">{error}</p>
+        <p className="mt-3 break-words text-11 text-[var(--text-danger)] [overflow-wrap:anywhere]">
+          {error}
+        </p>
       ) : null}
       <div className="mt-4 flex justify-end gap-2">
         <button
@@ -746,15 +783,24 @@ function AutomationRow({
             {automation.prompt}
           </p>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-11 text-[var(--text-tertiary)]">
-            <span>{t('bots.automations.nextRun')}: {formatTime(automation.nextFireAt)}</span>
             <span>
-              {t('bots.automations.lastRun')}: {formatTime(automation.lastFinishedAt ?? automation.lastFiredAt)}
+              {t('bots.automations.nextRun')}: {formatTime(automation.nextFireAt)}
             </span>
-            <span>{t('bots.automations.timezone')}: {automation.timezone}</span>
-            <span>{t('bots.automations.nextProfileVersion', { version: currentProfileVersion })}</span>
+            <span>
+              {t('bots.automations.lastRun')}:{' '}
+              {formatTime(automation.lastFinishedAt ?? automation.lastFiredAt)}
+            </span>
+            <span>
+              {t('bots.automations.timezone')}: {automation.timezone}
+            </span>
+            <span>
+              {t('bots.automations.nextProfileVersion', { version: currentProfileVersion })}
+            </span>
           </div>
           {error ? (
-            <p className="mt-3 break-words text-11 text-[var(--text-danger)] [overflow-wrap:anywhere]">{error}</p>
+            <p className="mt-3 break-words text-11 text-[var(--text-danger)] [overflow-wrap:anywhere]">
+              {error}
+            </p>
           ) : null}
           <div className="mt-3 flex flex-wrap justify-end gap-2">
             <button
@@ -810,10 +856,13 @@ export function BotAutomationSettings({
   bot,
   trusted,
   onOpenTask,
+  surface = 'settings',
 }: {
   bot: BotProfile;
   trusted: boolean;
   onOpenTask: (sessionId: string) => void;
+  /** settings = 设置页卡片；panel = Hermes 风格的聊天右侧常驻工作面。 */
+  surface?: 'settings' | 'panel';
 }) {
   const { t } = useBotTranslation();
   const bots = useBotProfiles();
@@ -876,16 +925,25 @@ export function BotAutomationSettings({
   }, [bot.id, load]);
 
   return (
-    <section className={BOT_SETTINGS_BLOCK_CLASS}>
-      {/* 主路径上这一块叫「TA 的日程」,不叫「伙伴自动化」——它跟「TA 是谁 /
-          TA 会的 / TA 懂的」是同一排的一块,得说同一种话。「自动化」「Routine」
-          这类实现词留在高级里。 */}
+    <section
+      className={cn(
+        BOT_SETTINGS_BLOCK_CLASS,
+        surface === 'panel' && 'min-h-0 border-0 bg-transparent p-3',
+      )}
+      data-surface={surface}
+    >
+      {/* 设置页使用产品化的「自动化」名称；聊天侧工作面则使用更短的面板标题。
+          Routine 仍只作为实现名，不进入主路径文案。 */}
       <BotSettingsBlockHeading
         icon={CalendarClock}
-        title={t('bots.settingsBlocks.schedule')}
+        title={
+          surface === 'panel' ? t('bots.automations.panelTitle') : t('bots.settingsBlocks.schedule')
+        }
         /* 「到点自己干,不用你在」只在还没有日程时说 —— 已经排了活的人不需要再被
            讲一遍这块是干什么的。空态本身也会解释,所以这句一旦有内容就撤掉。 */
-        hint={visibleAutomations.length === 0 ? t('bots.settingsBlocks.scheduleDescription') : undefined}
+        hint={
+          visibleAutomations.length === 0 ? t('bots.settingsBlocks.scheduleDescription') : undefined
+        }
         action={
           <>
             <button
@@ -943,7 +1001,9 @@ export function BotAutomationSettings({
       {loading ? (
         <p className="mt-4 text-12 text-[var(--text-tertiary)]">{t('bots.automations.loading')}</p>
       ) : error ? (
-        <p className="mt-4 break-words text-12 text-[var(--text-danger)] [overflow-wrap:anywhere]">{error}</p>
+        <p className="mt-4 break-words text-12 text-[var(--text-danger)] [overflow-wrap:anywhere]">
+          {error}
+        </p>
       ) : visibleAutomations.length > 0 ? (
         <div className="mt-4 flex flex-col gap-2">
           {visibleAutomations.map((automation) => (

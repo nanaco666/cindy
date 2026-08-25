@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { ArrowLeft, CircleAlert, RefreshCcw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { ArrowLeft, CircleAlert, RefreshCcw, X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -8,8 +9,20 @@ import { CCAgentSessionView } from '@/features/cc-agent/CCAgentSessionView';
 import type { ComposerBotMention } from '@/lib/fileTypes';
 import { markBotRead } from './botReadState';
 import type { BotChatIdentity } from './BotSessionContentHeader';
+import { BOT_AUTOMATION_TOGGLE_EVENT } from './BotSessionContentHeader';
+import { BotAutomationSettings } from './BotAutomationSettings';
+import { BotPronounProvider } from './botPronounContext';
+import { useBotProfiles } from './botStore';
 import { deliverPendingBotPersonaAck } from './botPersonaAck';
 import { deliverPendingBotWelcome } from './botWelcome';
+
+const AUTOMATION_WIDE_QUERY = '(min-width: 1280px)';
+
+function automationWideNow(): boolean {
+  return (
+    typeof window.matchMedia === 'function' && window.matchMedia(AUTOMATION_WIDE_QUERY).matches
+  );
+}
 
 type BotSessionGate =
   | { kind: 'loading' }
@@ -43,11 +56,11 @@ function readBotMention(value: unknown, currentBotId: string): ComposerBotMentio
     status?: unknown;
   };
   if (
-    typeof candidate.id !== 'string'
-    || candidate.id === currentBotId
-    || typeof candidate.name !== 'string'
-    || candidate.enabled === false
-    || (candidate.status !== undefined && candidate.status !== 'active')
+    typeof candidate.id !== 'string' ||
+    candidate.id === currentBotId ||
+    typeof candidate.name !== 'string' ||
+    candidate.enabled === false ||
+    (candidate.status !== undefined && candidate.status !== 'active')
   ) {
     return null;
   }
@@ -68,8 +81,43 @@ export function BotSessionView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { botId, sessionId } = useParams();
+  const profiles = useBotProfiles();
+  const bot = useMemo(
+    () => profiles.find((candidate) => candidate.id === botId) ?? null,
+    [botId, profiles],
+  );
   const [reloadVersion, setReloadVersion] = useState(0);
   const [gate, setGate] = useState<BotSessionGate>({ kind: 'loading' });
+  const [automationPanelVisible, setAutomationPanelVisible] = useState(true);
+  const [automationDrawerOpen, setAutomationDrawerOpen] = useState(false);
+  const [automationWide, setAutomationWide] = useState(automationWideNow);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia(AUTOMATION_WIDE_QUERY);
+    const sync = () => {
+      setAutomationWide(query.matches);
+      // Radix Dialog keeps focus trapped while open. When a narrow drawer is
+      // hidden by the xl breakpoint, close it as well so resizing cannot leave
+      // an invisible modal intercepting keyboard and pointer interaction.
+      if (query.matches) setAutomationDrawerOpen(false);
+    };
+    sync();
+    query.addEventListener?.('change', sync);
+    return () => query.removeEventListener?.('change', sync);
+  }, []);
+
+  useEffect(() => {
+    const toggleAutomation = () => {
+      if (automationWide) {
+        setAutomationPanelVisible((current) => !current);
+        return;
+      }
+      setAutomationDrawerOpen(true);
+    };
+    window.addEventListener(BOT_AUTOMATION_TOGGLE_EVENT, toggleAutomation);
+    return () => window.removeEventListener(BOT_AUTOMATION_TOGGLE_EVENT, toggleAutomation);
+  }, [automationWide]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,16 +243,14 @@ export function BotSessionView() {
     return (
       <main className="flex h-full items-center justify-center bg-[var(--surface)] p-6">
         <section className="w-full max-w-md rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5 text-center">
-          <CircleAlert
-            size={24}
-            className="mx-auto text-[var(--text-danger)]"
-            aria-hidden
-          />
+          <CircleAlert size={24} className="mx-auto text-[var(--text-danger)]" aria-hidden />
           <h1 className="mt-3 text-16 font-medium text-[var(--text-primary)]">
             {t(failed ? 'bots.sessionLoadFailedTitle' : 'bots.sessionUnavailableTitle')}
           </h1>
           <p className="mt-2 break-words text-12 leading-5 text-[var(--text-secondary)] [overflow-wrap:anywhere]">
-            {failed ? t('bots.sessionLoadFailedDescription') : t('bots.sessionUnavailableDescription')}
+            {failed
+              ? t('bots.sessionLoadFailedDescription')
+              : t('bots.sessionUnavailableDescription')}
           </p>
           {failed && gate.message ? (
             <p className="mt-3 max-h-24 overflow-y-auto whitespace-pre-wrap rounded-lg bg-[var(--surface)] px-3 py-2 text-left text-11 text-[var(--text-danger)] [overflow-wrap:anywhere]">
@@ -235,5 +281,60 @@ export function BotSessionView() {
       </main>
     );
   }
-  return <CCAgentSessionView botMentions={gate.mentions} botIdentity={gate.identity} />;
+  const automation =
+    bot && gate.isCanonical ? (
+      <BotPronounProvider bot={bot}>
+        <BotAutomationSettings
+          bot={bot}
+          trusted={bot.capabilities.permissions === 'trusted'}
+          surface="panel"
+          onOpenTask={(targetSessionId) => {
+            setAutomationDrawerOpen(false);
+            navigate(`/bots/${bot.id}/session/${targetSessionId}`);
+          }}
+        />
+      </BotPronounProvider>
+    ) : null;
+
+  return (
+    <main className="relative flex h-full min-w-0 overflow-hidden bg-[var(--surface)]">
+      <div className="min-w-0 flex-1">
+        <CCAgentSessionView botMentions={gate.mentions} botIdentity={gate.identity} />
+      </div>
+      {automation && automationPanelVisible ? (
+        <aside
+          data-testid="bot-automation-panel"
+          aria-label={t('bots.automations.panelTitle')}
+          className="hidden h-full w-[320px] shrink-0 overflow-y-auto border-l border-[var(--border-default)] bg-[var(--surface-elevated)] xl:block"
+        >
+          {automation}
+        </aside>
+      ) : null}
+
+      <Dialog.Root open={automationDrawerOpen} onOpenChange={setAutomationDrawerOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-[var(--overlay-modal)] xl:hidden" />
+          <Dialog.Content
+            data-testid="bot-automation-drawer"
+            className="fixed inset-y-0 right-0 z-50 w-[min(92vw,380px)] overflow-y-auto border-l border-[var(--border-default)] bg-[var(--surface-elevated)] pt-11 outline-none xl:hidden"
+          >
+            <Dialog.Title className="sr-only">{t('bots.automations.panelTitle')}</Dialog.Title>
+            <Dialog.Description className="sr-only">
+              {t('bots.settingsBlocks.scheduleDescription')}
+            </Dialog.Description>
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                aria-label={t('bots.close')}
+                className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface-elevated)] text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              >
+                <X size={16} />
+              </button>
+            </Dialog.Close>
+            {automation}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </main>
+  );
 }

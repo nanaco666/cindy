@@ -40,17 +40,18 @@ import {
 
 function renderRoster(opts: { onCreated?: ReturnType<typeof vi.fn> } = {}) {
   const onCreated = opts.onCreated ?? vi.fn();
-  render(<BotRosterView onCreated={onCreated} />);
+  render(<BotRosterView initialView="templates" onCreated={onCreated} />);
   return { onCreated };
 }
 
-/**
- * 「自己捏一个」现在先落在角色生成那一步;原来那张「名字 + 头像」的表由
- * 「跳过,自己写」进入。手写路径本身一步没变,所以这些用例只是多走一次跳过。
- */
+/** 模板页里的「创建自己的伙伴」进入同一份自由创建表单。 */
 function openManualCustom() {
   fireEvent.click(screen.getByRole('button', { name: 'bots.roster.customAction' }));
-  fireEvent.click(screen.getByRole('button', { name: 'bots.roster.generate.skip' }));
+}
+
+function openGenerator() {
+  openManualCustom();
+  fireEvent.click(screen.getByRole('button', { name: 'bots.roster.generate.action' }));
 }
 
 /** The join button that belongs to one roster card. */
@@ -99,6 +100,18 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('BotRosterView — the roster page', () => {
+  it('opens on the free-form identity page in the real product path', () => {
+    render(<BotRosterView />);
+
+    expect(screen.getByText('bots.roster.customTitle')).toBeTruthy();
+    expect(screen.getByLabelText('bots.descriptionLabel')).toBeTruthy();
+    expect(screen.getByLabelText('bots.background.title')).toBeTruthy();
+    expect(screen.getByLabelText('bots.persona.title')).toBeTruthy();
+    expect(screen.getByLabelText('bots.roster.customNameLabel')).toBeTruthy();
+    expect(screen.queryByText('bots.createWizard.templates.cindy.name')).toBeNull();
+    expect(screen.queryByText('bots.roster.generate.title')).toBeNull();
+  });
+
   it('shows every character with a face, a skill, a self-introduction and a join button', () => {
     renderRoster();
 
@@ -120,9 +133,9 @@ describe('BotRosterView — the roster page', () => {
         screen.getAllByText(`bots.roster.join:{"pronoun":"${expected}"}`).length,
       ).toBeGreaterThanOrEqual(1);
     }
-    expect(
-      screen.getAllByText((text) => text.startsWith('bots.roster.join:')).length,
-    ).toBe(BOT_TEMPLATES.length);
+    expect(screen.getAllByText((text) => text.startsWith('bots.roster.join:')).length).toBe(
+      BOT_TEMPLATES.length,
+    );
     // 阵容式创建没有名字 / 描述 / 身份表单。
     expect(screen.queryByText('bots.nameLabel')).toBeNull();
     expect(screen.queryByText('bots.descriptionLabel')).toBeNull();
@@ -149,7 +162,7 @@ describe('BotRosterView — the roster page', () => {
     expect(joinButtonFor('melody').disabled).toBe(false);
   });
 
-  it('creates straight from the card, with that character\'s identity and capabilities', async () => {
+  it("creates straight from the card, with that character's identity and capabilities", async () => {
     const { onCreated } = renderRoster();
 
     fireEvent.click(joinButtonFor('butler'));
@@ -195,14 +208,24 @@ describe('BotRosterView — the roster page', () => {
     expect(payload.eventSubscription).toBeUndefined();
   });
 
-  it('asks the blank card for a name and a face, and nothing else', async () => {
+  it("asks for identity and personality in the user's own words before appearance", async () => {
     renderRoster();
 
     openManualCustom();
-    const submit = screen.getByRole('button', { name: /^bots.roster.join:/ }) as HTMLButtonElement;
+    const submit = screen.getByRole('button', {
+      name: 'bots.roster.create',
+    }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
-    // 自定义卡不再逼用户先写一段身份设定。
-    expect(screen.queryByLabelText('bots.createWizard.roleLabel')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('bots.descriptionLabel'), {
+      target: { value: 'Release partner' },
+    });
+    fireEvent.change(screen.getByLabelText('bots.background.title'), {
+      target: { value: 'Own release preparation and verification.' },
+    });
+    fireEvent.change(screen.getByLabelText('bots.persona.title'), {
+      target: { value: 'Be direct and warn me early.' },
+    });
 
     const name = screen.getByLabelText('bots.roster.customNameLabel', {
       selector: 'input',
@@ -214,6 +237,10 @@ describe('BotRosterView — the roster page', () => {
     await waitFor(() => expect(mocks.addBotProfileAndWait).toHaveBeenCalledTimes(1));
     const payload = mocks.addBotProfileAndWait.mock.calls[0][0];
     expect(payload.name).toBe('Ops buddy');
+    expect(payload.description).toBe('Release partner');
+    expect(payload.identitySource).toBe(
+      'Own release preparation and verification.\n\nBe direct and warn me early.',
+    );
     expect(payload.capabilities).toBeUndefined();
     expect(payload.eventSubscription).toBeUndefined();
     // 空白卡拿到的是这版能画出来的立绘,不是官方 Cindy 头像。
@@ -267,6 +294,7 @@ describe('BotRosterView — the roster page', () => {
   it('lays the character faces out flat on the blank card page — picking one costs no extra click', () => {
     renderRoster();
     openManualCustom();
+    fireEvent.click(screen.getByText('bots.roster.customAvatarLabel'));
 
     for (const id of BOT_PRESET_AVATAR_IDS) {
       expect(screen.getByRole('button', { name: `bots.avatarPicker.presets.${id}` })).toBeTruthy();
@@ -278,12 +306,12 @@ describe('BotRosterView — the roster page', () => {
   it('creates with the face the user picked on the blank card', async () => {
     renderRoster();
     openManualCustom();
+    fireEvent.click(screen.getByText('bots.roster.customAvatarLabel'));
     fireEvent.click(screen.getByRole('button', { name: 'bots.avatarPicker.presets.owl' }));
-    fireEvent.change(
-      screen.getByLabelText('bots.roster.customNameLabel', { selector: 'input' }),
-      { target: { value: 'Ops buddy' } },
-    );
-    fireEvent.click(screen.getByRole('button', { name: /^bots.roster.join:/ }));
+    fireEvent.change(screen.getByLabelText('bots.roster.customNameLabel', { selector: 'input' }), {
+      target: { value: 'Ops buddy' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'bots.roster.create' }));
 
     await waitFor(() => expect(mocks.addBotProfileAndWait).toHaveBeenCalledTimes(1));
     expect(parsePresetAvatarId(mocks.addBotProfileAndWait.mock.calls[0][0].avatar)).toBe('owl');
@@ -294,7 +322,7 @@ describe('BotRosterView — the roster page', () => {
   第 9 条:模板的「初始记忆」要在选卡那一刻真的落地,而不是停在定义里。
 */
 describe('BotRosterView — 角色自带的开场笔记', () => {
-  it('writes the character\'s own starting notes into its memory space on join', async () => {
+  it("writes the character's own starting notes into its memory space on join", async () => {
     renderRoster();
 
     fireEvent.click(joinButtonFor('shiba'));
@@ -338,7 +366,7 @@ describe('BotRosterView — 角色自带的开场笔记', () => {
     fireEvent.change(screen.getByLabelText('bots.roster.customNameLabel', { selector: 'input' }), {
       target: { value: 'Ops buddy' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /^bots.roster.join:/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'bots.roster.create' }));
 
     await waitFor(() => expect(mocks.addBotProfileAndWait).toHaveBeenCalledTimes(1));
     expect(mocks.seedBotMemory).not.toHaveBeenCalled();
@@ -346,21 +374,21 @@ describe('BotRosterView — 角色自带的开场笔记', () => {
 });
 
 /*
-  第 10 条:自定义路径先问一句「TA 是谁」,一句话换回一份可编辑的草稿。
-  这一组钉三件事 —— 生成后能改、改完落库、失败必须说人话且「自己写」还在。
+  AI 起草只是一条可选捷径。这一组钉三件事 —— 生成后能改、改完落库、失败必须
+  说人话且完整手写表单始终可返回。
 */
 describe('BotRosterView — 角色生成助手', () => {
   const askForRole = (role: string) => {
-    fireEvent.click(screen.getByRole('button', { name: 'bots.roster.customAction' }));
+    openGenerator();
     fireEvent.change(screen.getByLabelText('bots.roster.generate.inputLabel'), {
       target: { value: role },
     });
     fireEvent.click(screen.getByRole('button', { name: /bots\.roster\.generate\.action/ }));
   };
 
-  it('lands on the one-line question, with the manual path right beside it', () => {
+  it('opens the one-line drafting question only after the user asks for it', () => {
     renderRoster();
-    fireEvent.click(screen.getByRole('button', { name: 'bots.roster.customAction' }));
+    openGenerator();
 
     expect(screen.getByText('bots.roster.generate.title')).toBeTruthy();
     expect(screen.getByLabelText('bots.roster.generate.inputLabel')).toBeTruthy();
@@ -457,10 +485,12 @@ describe('BotRosterView — 角色生成助手', () => {
 
   it('keeps the hand-written path reachable from the question step', async () => {
     renderRoster();
-    fireEvent.click(screen.getByRole('button', { name: 'bots.roster.customAction' }));
+    openGenerator();
     fireEvent.click(screen.getByRole('button', { name: 'bots.roster.generate.skip' }));
 
-    expect(screen.getByLabelText('bots.roster.customNameLabel', { selector: 'input' })).toBeTruthy();
+    expect(
+      screen.getByLabelText('bots.roster.customNameLabel', { selector: 'input' }),
+    ).toBeTruthy();
     expect(mocks.generateBotPersona).not.toHaveBeenCalled();
   });
 });
@@ -470,9 +500,9 @@ describe('BotRosterView — 角色生成助手', () => {
   模板卡一直兑现;手捏与生成两条路在这一轮补齐,走的是同一条幂等注入通道。
 */
 describe('BotRosterView — 每条路都打招呼', () => {
-  it('uses the model\'s own opening line when the draft was left as generated', async () => {
+  it("uses the model's own opening line when the draft was left as generated", async () => {
     renderRoster();
-    fireEvent.click(screen.getByRole('button', { name: 'bots.roster.customAction' }));
+    openGenerator();
     fireEvent.change(screen.getByLabelText('bots.roster.generate.inputLabel'), {
       target: { value: '设计师' },
     });
@@ -493,7 +523,7 @@ describe('BotRosterView — 每条路都打招呼', () => {
   */
   it('drops the generated line once the user renames the teammate', async () => {
     renderRoster();
-    fireEvent.click(screen.getByRole('button', { name: 'bots.roster.customAction' }));
+    openGenerator();
     fireEvent.change(screen.getByLabelText('bots.roster.generate.inputLabel'), {
       target: { value: '设计师' },
     });

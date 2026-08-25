@@ -13,7 +13,7 @@
  * 这里给一个带图标 + 文案的显式入口,点击 = 用户主动打开(reveal 默认 true)。
  */
 import { useMemo, useState } from 'react';
-import { Package, Settings2 } from 'lucide-react';
+import { CalendarClock, Package, Settings2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -27,6 +27,8 @@ export interface BotChatIdentity {
   avatar?: string | null;
   avatarColor?: string | null;
 }
+
+export const BOT_AUTOMATION_TOGGLE_EVENT = 'cindy:bot-automation-toggle';
 
 export function BotSessionContentHeader({
   bot,
@@ -74,7 +76,7 @@ export function BotSessionContentHeader({
             className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-12 text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
           >
             <Package size={14} aria-hidden="true" />
-            <span>{t('rightSidebar.tabs.kinds.botArtifacts')}</span>
+            <span className="hidden sm:inline">{t('rightSidebar.tabs.kinds.botArtifacts')}</span>
           </button>
           {openError ? (
             <span
@@ -85,6 +87,16 @@ export function BotSessionContentHeader({
               {openError}
             </span>
           ) : null}
+          <button
+            type="button"
+            data-testid="bot-automation-header-entry"
+            onClick={() => window.dispatchEvent(new CustomEvent(BOT_AUTOMATION_TOGGLE_EVENT))}
+            title={t('bots.automations.panelTitle')}
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-12 text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+          >
+            <CalendarClock size={14} aria-hidden="true" />
+            <span className="hidden sm:inline">{t('bots.automations.panelTitle')}</span>
+          </button>
         </span>
       ) : null}
       <button

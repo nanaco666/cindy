@@ -46,7 +46,9 @@ vi.mock('../botStore', () => ({
   setBotHidden: mocks.setBotHidden,
   setBotPinned: mocks.setBotPinned,
   duplicateBotProfile: mocks.duplicateBotProfile,
-  canonicalBotSessionId: (bot: { sessions?: Array<{ id: string; role?: string; kind?: string }> }) =>
+  canonicalBotSessionId: (bot: {
+    sessions?: Array<{ id: string; role?: string; kind?: string }>;
+  }) =>
     bot.sessions?.find((session) => session.role === 'canonical' || session.kind === 'chat')?.id,
 }));
 vi.mock('../botGroupStore', () => ({
@@ -150,9 +152,7 @@ describe('BotsSidebar 「正在输入…」', () => {
         lastMessageAt: Date.now(),
       }),
     ];
-    mocks.islandActivity = new Map([
-      ['bot-1-chat', { sessionId: 'bot-1-chat', phase: 'running' }],
-    ]);
+    mocks.islandActivity = new Map([['bot-1-chat', { sessionId: 'bot-1-chat', phase: 'running' }]]);
     const view = await renderSidebar();
 
     expect(view.container.textContent).toContain('bots.list.typing');
@@ -193,14 +193,10 @@ describe('BotsSidebar 「正在输入…」', () => {
   it('是斜体三级色的过程说明,即使有未读也不跟着提到一级', async () => {
     mocks.profiles = [bot({ id: 'bot-1', name: 'PR steward' })];
     mocks.unread = { 'bot-1': 4 };
-    mocks.islandActivity = new Map([
-      ['bot-1-chat', { sessionId: 'bot-1-chat', phase: 'running' }],
-    ]);
+    mocks.islandActivity = new Map([['bot-1-chat', { sessionId: 'bot-1-chat', phase: 'running' }]]);
     const view = await renderSidebar();
 
-    const line = [...view.container.querySelectorAll('span')].find(
-      (el) => el.textContent === 'bots.list.typing',
-    );
+    const line = screen.getByText('bots.list.typing');
     expect(line).toBeTruthy();
     expect(line?.className).toContain('italic');
     expect(line?.className).toContain('text-[var(--sidebar-list-muted)]');
@@ -217,9 +213,7 @@ describe('BotsSidebar rows', () => {
     expect(screen.getByLabelText('bots.list.needsAttention')).toBeTruthy();
   });
   it('shows visible recent Bots in Active now and opens their canonical chat', async () => {
-    mocks.profiles = [
-      bot({ id: 'bot-1', name: 'Active steward', lastMessageAt: Date.now() }),
-    ];
+    mocks.profiles = [bot({ id: 'bot-1', name: 'Active steward', lastMessageAt: Date.now() })];
 
     await renderSidebar();
 
@@ -331,9 +325,9 @@ describe('BotsSidebar rows', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('bots.inbox.sidebarAttention:{"count":1}')).toBeTruthy(),
     );
-    expect(
-      screen.getByLabelText('bots.inbox.sidebarAttention:{"count":1}').className,
-    ).toContain('bg-[var(--bot-unread-bg)]');
+    expect(screen.getByLabelText('bots.inbox.sidebarAttention:{"count":1}').className).toContain(
+      'bg-[var(--bot-unread-bg)]',
+    );
   });
 
   it('opens the roster page instead of a modal from every "add" affordance', async () => {

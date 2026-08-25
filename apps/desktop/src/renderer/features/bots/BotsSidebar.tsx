@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Archive, Bot, Copy, Eye, EyeOff, MessageCircleMore, MoreHorizontal, Pin, Plus, Search } from 'lucide-react';
+import {
+  AlertTriangle,
+  Archive,
+  Bot,
+  Copy,
+  Eye,
+  EyeOff,
+  MessageCircleMore,
+  Pin,
+  Plus,
+  Search,
+} from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -63,6 +74,7 @@ function BotsSidebarContent() {
   const [query, setQuery] = useState('');
   const [showHidden, setShowHidden] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [menuBotId, setMenuBotId] = useState<string | null>(null);
 
   /*
     「正在输入…」的信号来源：灵动岛活动镜像(state/agentIslandActivity)。
@@ -332,6 +344,10 @@ function BotsSidebarContent() {
               return (
                 <div
                   key={bot.id}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setMenuBotId(bot.id);
+                  }}
                   className={cn(
                     'group relative flex w-full items-center rounded-xl transition-colors',
                     selected
@@ -347,6 +363,13 @@ function BotsSidebarContent() {
                   <button
                     type="button"
                     onClick={() => navigate(`/bots/${bot.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) {
+                        return;
+                      }
+                      event.preventDefault();
+                      setMenuBotId(bot.id);
+                    }}
                     className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left"
                   >
                     {/* 40px。28px 会让两行式行高塌成一行的观感——头像撑不住两行文字,
@@ -379,13 +402,8 @@ function BotsSidebarContent() {
                             aria-label={t('bots.list.needsAttention')}
                           />
                         ) : null}
-                        {timestamp ? (
-                          <span className={cn('shrink-0 text-11', mutedClass)}>
-                            {timestamp}
-                          </span>
-                        ) : null}
                       </span>
-                      <span className="flex items-center gap-2">
+                      <span className="flex min-w-0 items-center gap-2">
                         {/* 未读时不加 mutedClass:第二行跟着提到一级色,「有新消息」在
                             一屏里靠亮度就能被扫到,不用先读数字。 */}
                         <span
@@ -404,13 +422,16 @@ function BotsSidebarContent() {
                         >
                           {subtitleText}
                         </span>
-                        {/* Unread messages own the numeric badge (IM convention:
-                            the count answers "how much have I not seen"). A
-                            pending inbox todo is a second, weaker signal — when
-                            both are live it degrades to a dot so the row never
-                            shows two competing counts; its number stays in the
-                            label. 两者都长在第二行的右端(定稿 `.row-l2` 的
-                            justify-between 位),不再另开一列。 */}
+                      </span>
+                    </span>
+                    {/*
+                      Grok / Hermes 都把消息行当成完整的联系人入口。时间与未读因此
+                      有自己的固定右列，不再跟名字和预览抢剩余宽度；无论名字多长、
+                      有没有未读，所有数字都落在同一条垂直线上。
+                    */}
+                    <span className="flex w-10 shrink-0 self-stretch flex-col items-end justify-between py-0.5">
+                      <span className={cn('min-h-4 text-11', mutedClass)}>{timestamp}</span>
+                      <span className="flex min-h-[18px] items-center justify-end gap-1.5">
                         {unread > 0 ? (
                           <span
                             className={UNREAD_BADGE_CLASS}
@@ -437,15 +458,16 @@ function BotsSidebarContent() {
                       </span>
                     </span>
                   </button>
-                  <DropdownMenu>
+                  <DropdownMenu
+                    open={menuBotId === bot.id}
+                    onOpenChange={(open) => setMenuBotId(open ? bot.id : null)}
+                  >
                     <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--sidebar-list-muted)] opacity-0 transition-opacity hover:bg-sidebar-item-hover group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100"
-                        aria-label={t('bots.list.moreActions', { name: bot.name })}
-                      >
-                        <MoreHorizontal size={14} />
-                      </button>
+                      {/*
+                        菜单只作为右键 / 长按 / Shift+F10 的锚点。它不占一列，也不
+                        覆盖未读；常用动作是打开聊天，管理动作留在上下文菜单。
+                      */}
+                      <span className="pointer-events-none absolute right-2 top-2 h-px w-px" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="min-w-40">
                       <DropdownMenuItem onSelect={() => void setBotPinned(bot.id, !bot.pinnedAt)}>
@@ -456,7 +478,9 @@ function BotsSidebarContent() {
                         onSelect={() => {
                           void setBotHidden(bot.id, true).then(() => {
                             if (!selected) return;
-                            const fallback = roster.visible.find((candidate) => candidate.id !== bot.id);
+                            const fallback = roster.visible.find(
+                              (candidate) => candidate.id !== bot.id,
+                            );
                             navigate(fallback ? `/bots/${fallback.id}` : '/bots');
                           });
                         }}
@@ -467,7 +491,9 @@ function BotsSidebarContent() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         onSelect={() => {
-                          void duplicateBotProfile(bot.id).then((copy) => navigate(`/bots/${copy.id}`));
+                          void duplicateBotProfile(bot.id).then((copy) =>
+                            navigate(`/bots/${copy.id}`),
+                          );
                         }}
                       >
                         <Copy size={14} className="mr-2" />
@@ -501,7 +527,9 @@ function BotsSidebarContent() {
                           className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left opacity-60"
                         >
                           <BotAvatar bot={bot} size="sm" />
-                          <span className="min-w-0 flex-1 truncate text-13 font-medium">{bot.name}</span>
+                          <span className="min-w-0 flex-1 truncate text-13 font-medium">
+                            {bot.name}
+                          </span>
                         </button>
                         <button
                           type="button"
@@ -537,7 +565,10 @@ function BotsSidebarContent() {
                       )}
                     >
                       <BotAvatar bot={bot} size="sm" className="opacity-70" />
-                      <span className="min-w-0 flex-1 truncate text-13 font-medium" title={bot.name}>
+                      <span
+                        className="min-w-0 flex-1 truncate text-13 font-medium"
+                        title={bot.name}
+                      >
                         {bot.name}
                       </span>
                     </button>

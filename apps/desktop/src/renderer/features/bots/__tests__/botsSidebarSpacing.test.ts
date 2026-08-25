@@ -12,6 +12,7 @@
  *   .row-open  { flex:1; padding:8px 10px; gap:10px }                     → px-2.5 py-2 gap-2.5(左右对称)
  *   .row-l1    { display:flex; align-items:baseline; gap:8px }            → gap-2
  *   .row-l2    { display:flex; align-items:center; gap:8px; margin-top:2px } → gap-2 + 外层 flex-col gap-0.5
+ *   .row-meta  { width:40px; align-items:flex-end }                       → w-10 items-end
  *   .row-name  { font-size:14px }                                        → text-14
  *   .row-time  { font-size:11px; flex:none }                             → text-11 shrink-0
  *   .row-prev  { font-size:12.5px }                                      → text-12(仓库字号阶梯里最近的一档)
@@ -40,8 +41,7 @@ const code = source
 /** 可点行本体(头像 + 两行文字)的类名串。 */
 const ROW_BUTTON_CLASS =
   'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left';
-const ROW_CONTAINER_CLASS =
-  'group relative flex w-full items-center rounded-xl transition-colors';
+const ROW_CONTAINER_CLASS = 'group relative flex w-full items-center rounded-xl transition-colors';
 
 describe('伙伴行的间距基线', () => {
   it('行容器不带内边距,也不再给行尾留占位列', () => {
@@ -75,22 +75,35 @@ describe('伙伴行的间距基线', () => {
   it('五要素的字号与固定尺寸不漂', () => {
     // 名字 14px / 时间 11px / 预览 12px。
     expect(source).toContain("'min-w-0 flex-1 truncate text-14 leading-5',");
-    expect(source).toContain("cn('shrink-0 text-11', mutedClass)");
+    expect(source).toContain("cn('min-h-4 text-11', mutedClass)");
     expect(source).toContain("'min-w-0 flex-1 truncate text-12 leading-4',");
     // 徽标 18×18,左右各 6px。
     expect(source).toContain(
       'flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--bot-unread-bg)] px-1.5 text-11 font-medium leading-none text-[var(--bot-unread-fg)]',
     );
     // 待办点 6×6。
-    expect(source).toContain('className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--bot-unread-bg)]"');
+    expect(source).toContain(
+      'className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--bot-unread-bg)]"',
+    );
   });
 
-  it('未读徽标与待办点都长在第二行内,不另开一列', () => {
-    const start = source.indexOf('<span className="flex items-center gap-2">');
-    const secondLine = source.slice(start, source.indexOf('</button>', start));
-    expect(secondLine).toContain("aria-label={t('bots.list.unread', { count: unread })}");
-    expect(secondLine).toContain(
+  it('时间、未读与待办共用固定右列,不会被名字或预览推来推去', () => {
+    const start = source.indexOf(
+      '<span className="flex w-10 shrink-0 self-stretch flex-col items-end justify-between py-0.5">',
+    );
+    const metaColumn = source.slice(start, source.indexOf('</button>', start));
+    expect(metaColumn).toContain("aria-label={t('bots.list.unread', { count: unread })}");
+    expect(metaColumn).toContain(
       "aria-label={t('bots.inbox.sidebarAttention', { count: attention })}",
+    );
+    expect(metaColumn).toContain("cn('min-h-4 text-11', mutedClass)");
+  });
+
+  it('管理菜单不再占据消息行宽度', () => {
+    expect(source).not.toContain('<MoreHorizontal');
+    expect(source).toContain('onContextMenu={(event) => {');
+    expect(source).toContain(
+      '<span className="pointer-events-none absolute right-2 top-2 h-px w-px" />',
     );
   });
 

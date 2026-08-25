@@ -52,7 +52,6 @@ import { BotRosterView } from './BotRosterView';
 import { BotAvatar, BotAvatarPicker } from './BotAvatar';
 import { BotCapabilitySettings } from './BotCapabilitySettings';
 import { BotProjectSettings } from './BotProjectSettings';
-import { BotAutomationSettings } from './BotAutomationSettings';
 import { shouldDeferCanonicalBotSessionNavigation } from './botNavigation';
 import { BotRouteSettings } from './BotRouteSettings';
 import { BotLifecycleSettings } from './BotLifecycleSettings';
@@ -134,7 +133,10 @@ export function BotSettings({
   // 面板"。旧 `?settings=1&tab=<value>` 书签仍要落到合理位置——`resolveBotSettingsAnchor`
   // 把旧 7 个 tab id 与新 5 个锚点都映射到同一套结果,未知/缺省值一律回落到页顶(`null`)。
   const anchor = useMemo(
-    () => resolveBotSettingsAnchor(settingsSearchParams.get('tab') ?? settingsSearchParams.get('anchor')),
+    () =>
+      resolveBotSettingsAnchor(
+        settingsSearchParams.get('tab') ?? settingsSearchParams.get('anchor'),
+      ),
     [settingsSearchParams],
   );
   // 批次 ε:从消息气泡的成长尾注跳进来时,除了滚到「TA 是谁」还要指出**是哪一条**
@@ -159,12 +161,16 @@ export function BotSettings({
     schedule: null,
     advanced: null,
   });
-  // "高级" 默认收起;深链直接指向 advanced(旧 capabilities/notifications/advanced
-  // 三个 tab 都落在这)时自动展开,否则用户点了才展开。
-  const [advancedOpen, setAdvancedOpen] = useState(anchor === 'advanced');
+  // "高级" 默认收起;深链指向运营区块，或消息尾注要求高亮记忆/学习记录时，
+  // 必须先自动展开。否则链接虽然滚到了设置页，真正要看的内容仍藏在折叠层里。
+  const [advancedOpen, setAdvancedOpen] = useState(
+    (anchor !== null && anchor !== 'who') || requestedHighlight !== null,
+  );
   useEffect(() => {
-    if (anchor === 'advanced') setAdvancedOpen(true);
-  }, [anchor]);
+    if ((anchor !== null && anchor !== 'who') || requestedHighlight !== null) {
+      setAdvancedOpen(true);
+    }
+  }, [anchor, requestedHighlight]);
   useEffect(() => {
     if (!anchor) {
       contentRef.current?.scrollTo({ top: 0 });
@@ -535,123 +541,129 @@ export function BotSettings({
         居中，两条左边界越拉越远，整页读起来像两栏不相干的东西拼在一起。这里给
         页头套上与内容区同宽同居中的容器。
       */}
-      <div className="shrink-0 px-8 pb-5 pt-8">
+      <div className="shrink-0 px-4 pb-4 pt-5 sm:px-8 sm:pb-5 sm:pt-8">
         <div className="mx-auto w-full max-w-3xl">
-        <button
-          type="button"
-          onClick={handleBack}
-          className="-ml-2 inline-flex w-fit items-center gap-2 rounded-lg px-2 py-1.5 text-12 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-        >
-          <ArrowLeft size={15} />
-          {t('bots.backToChat')}
-        </button>
-        <header className="mt-3 flex items-center gap-3">
-          <BotAvatar bot={{ ...bot, avatar, avatarColor }} size="lg" />
-          <div className="min-w-0">
-            <p className="text-12 font-medium uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
-              {t('bots.settings')}
-            </p>
-            <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-              <h1 className="text-24 font-medium text-[var(--text-primary)]">{bot.name}</h1>
-              {/*
+          <button
+            type="button"
+            onClick={handleBack}
+            className="-ml-2 inline-flex w-fit items-center gap-2 rounded-lg px-2 py-1.5 text-12 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+          >
+            <ArrowLeft size={15} />
+            {t('bots.backToChat')}
+          </button>
+          <header className="mt-3 flex items-center gap-3">
+            <BotAvatar bot={{ ...bot, avatar, avatarColor }} size="lg" />
+            <div className="min-w-0">
+              <p className="text-12 font-medium uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
+                {t('bots.settings')}
+              </p>
+              <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h1 className="text-24 font-medium text-[var(--text-primary)]">{bot.name}</h1>
+                {/*
                 产品裁决 2026-08-18:设置页头部不挂「放手做」⚠。伙伴不是一个需要
-                被随时警告的对象;能力与风险由「TA 会的」那面陈列自己说清楚。
+                被随时警告的对象;能力与风险在高级能力区说明。
               */}
-              {/*
+                {/*
                 自动保存的可观测状态。空闲不显示 —— 常驻的「已保存」是噪音,不是信息。
                 失败才落到下一行,并自带重试入口。
               */}
-              {autosave.status === 'saving' ? (
-                <span
-                  role="status"
-                  className="inline-flex select-none items-center gap-1.5 text-11 text-[var(--text-tertiary)]"
-                >
-                  <Spinner size={12} />
-                  {t('bots.autosave.saving')}
-                </span>
-              ) : autosave.status === 'saved' ? (
-                <span
-                  role="status"
-                  className="inline-flex select-none animate-fade-in items-center gap-1 text-11 text-[var(--text-tertiary)]"
-                >
-                  <Check size={12} />
-                  {t('bots.autosave.saved')}
-                </span>
-              ) : null}
-            </div>
-            {/*
+                {autosave.status === 'saving' ? (
+                  <span
+                    role="status"
+                    className="inline-flex select-none items-center gap-1.5 text-11 text-[var(--text-tertiary)]"
+                  >
+                    <Spinner size={12} />
+                    {t('bots.autosave.saving')}
+                  </span>
+                ) : autosave.status === 'saved' ? (
+                  <span
+                    role="status"
+                    className="inline-flex select-none animate-fade-in items-center gap-1 text-11 text-[var(--text-tertiary)]"
+                  >
+                    <Check size={12} />
+                    {t('bots.autosave.saved')}
+                  </span>
+                ) : null}
+              </div>
+              {/*
               「{TA 的定位} · 今天加入」。这一行不解释功能,它回答的是「这是谁、跟了
               我多久」——设置页顶上除了名字之外唯一该说的话。定位优先用用户自己写的
               描述,没有就退回到这个伙伴擅长什么(描述是可空字段,不为它造一句)。
             */}
-            {headerMeta ? (
-              <p className="mt-1 text-12 leading-5 text-[var(--text-tertiary)]">{headerMeta}</p>
-            ) : null}
-            {autosave.status === 'error' ? (
-              <p
-                className="mt-1 flex flex-wrap items-center gap-2 text-11 text-[var(--text-danger)]"
-                role="alert"
-              >
-                {t('bots.profileApply.saveFailed')}
-                <button
-                  type="button"
-                  onClick={() => void autosave.retry()}
-                  className="rounded-lg px-1.5 py-0.5 text-11 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+              {headerMeta ? (
+                <p className="mt-1 text-12 leading-5 text-[var(--text-tertiary)]">{headerMeta}</p>
+              ) : null}
+              {autosave.status === 'error' ? (
+                <p
+                  className="mt-1 flex flex-wrap items-center gap-2 text-11 text-[var(--text-danger)]"
+                  role="alert"
                 >
-                  {t('bots.autosave.retry')}
-                </button>
-              </p>
-            ) : null}
-          </div>
-        </header>
+                  {t('bots.profileApply.saveFailed')}
+                  <button
+                    type="button"
+                    onClick={() => void autosave.retry()}
+                    className="rounded-lg px-1.5 py-0.5 text-11 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                  >
+                    {t('bots.autosave.retry')}
+                  </button>
+                </p>
+              ) : null}
+            </div>
+          </header>
         </div>
       </div>
 
-      <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+      <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-5 pb-10">
-          {/* "TA 是谁" */}
+          {/* 高频资料只回答三件事：它是谁、负责什么、怎样协作。 */}
           <BotSettingsBlock
             icon={UserRound}
             title={t('bots.settingsBlocks.who')}
-            /* 「性格不用你写——选几下就好」讲的是下面那条性格控件怎么用。已经选过的
-               人不需要再被讲一遍,所以只在还没设置时出现(见 BotSettingsBlock 的
-               hint 约定)。 */
-            hint={persona === null ? t('bots.settingsBlocks.whoDescription') : undefined}
+            hint={t('bots.settingsBlocks.whoDescription')}
             blockRef={(el) => {
               anchorRefs.current.who = el;
             }}
           >
-            <div className="flex items-center gap-3">
-              <BotAvatarPicker
-                name={name}
-                avatar={avatar}
-                avatarColor={avatarColor}
-                onChange={(next) => {
-                  setAvatar(next.emoji);
-                  setAvatarColor(next.hue);
-                  autosave.onEdit('instant');
+            <label className="flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
+              {t('bots.descriptionLabel')}
+              <input
+                value={description}
+                onChange={(event) => {
+                  setDescription(event.target.value);
+                  autosave.onEdit('text');
                 }}
+                onBlur={() => void autosave.flush()}
+                placeholder={t('bots.descriptionPlaceholder')}
+                className="h-10 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] px-3 text-14 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
               />
-              <div className="min-w-0 flex-1">
-                <input
-                  value={name}
-                  onChange={(event) => {
-                    setName(event.target.value);
-                    autosave.onEdit('text');
-                  }}
-                  onBlur={() => void autosave.flush()}
-                  aria-label={t('bots.nameLabel')}
-                  className="h-9 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 text-13 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
-                />
-                {/* 「消息入口: Local Bot」下沉到高级。这张卡回答的是「TA 是谁」,
-                    而 Local Bot 是实现词——它说的是这个 Profile 挂在哪条投递链上,
-                    不是这个伙伴的身份。 */}
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--surface-chip)] px-3 py-2.5">
-              <p className="min-w-0 flex-1 text-12 text-[var(--text-primary)]">
-                {personaSummaryText(t, persona)}
-              </p>
+            </label>
+
+            <label className="mt-4 flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
+              {t('bots.background.title')}
+              <textarea
+                value={backgroundDraft ?? background}
+                onChange={(event) => {
+                  setBackgroundDraft(event.target.value);
+                  setIdentitySource((current) => writeBotBackground(current, event.target.value));
+                  autosave.onEdit('text');
+                }}
+                onBlur={() => void autosave.flush()}
+                placeholder={t('bots.background.placeholder')}
+                aria-label={t('bots.background.title')}
+                rows={8}
+                className="w-full resize-y rounded-xl border border-[var(--border-default)] bg-[var(--surface)] px-3 py-2.5 text-13 leading-5 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
+              />
+            </label>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--surface-chip)] px-3 py-2.5">
+              <span className="min-w-0 flex-1">
+                <span className="block text-11 text-[var(--text-tertiary)]">
+                  {t('bots.persona.quickAdjustLabel')}
+                </span>
+                <span className="mt-0.5 block text-12 text-[var(--text-primary)]">
+                  {personaSummaryText(t, persona)}
+                </span>
+              </span>
               <button
                 type="button"
                 onClick={() => setPersonaOpen(true)}
@@ -661,173 +673,44 @@ export function BotSettings({
               </button>
             </div>
 
-            {/*
-              「背景设定」—— 这个伙伴到底是谁、负责什么的那段正文。
-
-              挑一张阵容卡时,卡上那段自我介绍背后其实还跟着一份完整的角色设定,
-              它一直被写进 identitySource,但在这之前**界面上没有任何地方能看到
-              它**:设置页只显示向导编译出来的一行人格摘要。用户于是既不知道自己
-              选来的伙伴脑子里装着什么,也没法改一个字。
-
-              这一块就是那段正文本身:默认只读(可滚动,长设定不撑爆页面),点「编辑」
-              进 textarea,走的是页面既有的 autosave 通道,跟名字、头像同一条路。
-              向导那三档口气**不在**这一块里 —— 它自己有 marker 段,两段互不覆盖
-              (见 botPersona.ts 的分段说明)。
-            */}
-            <div className="mt-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-12 font-medium text-[var(--text-primary)]">
-                  {t('bots.background.title')}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (backgroundDraft === null) {
-                      setBackgroundDraft(background);
-                      return;
-                    }
-                    // 「完成」不是「保存」——自动保存已经在打字时跑过了;这里只是
-                    // 收回编辑态,顺手把可能还在防抖窗口里的最后一次改动落下去。
-                    setBackgroundDraft(null);
-                    void autosave.flush();
+            <div className="mt-5 border-t border-[var(--border-default)] pt-5">
+              <p className="mb-3 text-11 font-medium uppercase tracking-[0.1em] text-[var(--text-tertiary)]">
+                {t('bots.appearanceTitle')}
+              </p>
+              <div className="flex items-center gap-3">
+                <BotAvatarPicker
+                  name={name}
+                  avatar={avatar}
+                  avatarColor={avatarColor}
+                  onChange={(next) => {
+                    setAvatar(next.emoji);
+                    setAvatarColor(next.hue);
+                    autosave.onEdit('instant');
                   }}
-                  className="h-8 shrink-0 rounded-lg border border-[var(--border-default)] px-3 text-11 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-                >
-                  {backgroundDraft === null ? t('bots.background.edit') : t('bots.background.done')}
-                </button>
-              </div>
-              {backgroundDraft !== null ? (
-                <textarea
-                  value={backgroundDraft}
-                  autoFocus
-                  onChange={(event) => {
-                    setBackgroundDraft(event.target.value);
-                    setIdentitySource((current) =>
-                      writeBotBackground(current, event.target.value),
-                    );
-                    autosave.onEdit('text');
-                  }}
-                  onBlur={() => void autosave.flush()}
-                  placeholder={t('bots.background.placeholder')}
-                  aria-label={t('bots.background.title')}
-                  rows={8}
-                  className="mt-2 w-full resize-y rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-12 leading-5 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
                 />
-              ) : background ? (
-                <p
-                  data-testid="bot-background-text"
-                  className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap rounded-xl bg-[var(--surface-chip)] px-3 py-2.5 text-12 leading-5 text-[var(--text-secondary)]"
-                >
-                  {background}
-                </p>
-              ) : (
-                <p className="mt-2 text-11 leading-4 text-[var(--text-tertiary)]">
-                  {t('bots.background.empty')}
-                </p>
-              )}
-              {/* 这句解释的是「背景设定和上面那三档口气是两套东西,改一个不动另一
-                  个」——只有正在改的人需要知道。只读时它是一行常驻的白噪音。 */}
-              {backgroundDraft !== null ? (
-                <p className="mt-2 text-11 leading-4 text-[var(--text-tertiary)]">
-                  {t('bots.background.footnote')}
-                </p>
-              ) : null}
+                <label className="min-w-0 flex-1 text-12 text-[var(--text-secondary)]">
+                  <span className="mb-1.5 block">{t('bots.nameLabel')}</span>
+                  <input
+                    value={name}
+                    onChange={(event) => {
+                      setName(event.target.value);
+                      autosave.onEdit('text');
+                    }}
+                    onBlur={() => void autosave.flush()}
+                    aria-label={t('bots.nameLabel')}
+                    className="h-10 w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface)] px-3 text-14 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
+                  />
+                </label>
+              </div>
             </div>
           </BotSettingsBlock>
 
-          {/* "TA 会的" */}
-          <BotSettingsBlock
-            icon={Sparkles}
-            title={t('bots.settingsBlocks.can')}
-            /* 这句常驻:它解释的是「为什么这里没有开关」,而版面上永远看不到开关,
-               所以用户永远得不到这个答案的第二个来源。 */
-            hint={t('bots.settingsBlocks.canDescription')}
-            blockRef={(el) => {
-              anchorRefs.current.can = el;
-            }}
-          >
-            <BotAbilityWall
-              connections={visibleChannelConnections}
-              isChannelMounted={(connection) => Boolean(mountedChannelFor(connection))}
-              channelBusyId={channelBusy}
-              onToggleChannel={(connection) => void toggleChannel(connection)}
-              onConnectAccount={(kind) => {
-                // 原地拉起该渠道真实的连接界面(设置 › IM 机器人 的对应分区/卡片)。
-                // 连完回到这一页时,下面那条 listBotChannelConnections effect 会
-                // 随 bot.id 重跑,行状态自然刷新。
-                const path = botChannelConnectPath(kind);
-                if (path) navigate(path);
-              }}
-            />
-            {channelError ? (
-              <p className="mt-3 text-11 text-[var(--text-danger)]">{channelError}</p>
-            ) : null}
-          </BotSettingsBlock>
-
-          {/* "TA 懂的" */}
-          <BotSettingsBlock
-            icon={FolderGit2}
-            title={t('bots.settingsBlocks.understand')}
-            /* 已经给过文件夹的人不用再看「给 TA 一个文件夹」——那句话的收件人是还
-               没给过的人。 */
-            hint={hasFolder ? undefined : t('bots.settingsBlocks.understandDescription')}
-            blockRef={(el) => {
-              anchorRefs.current.understand = el;
-            }}
-          >
-            <BotFolderCards botId={bot.id} bindings={bot.projectBindings ?? []} />
-          </BotSettingsBlock>
-
-          {/* "TA 记得的" + "TA 学会的" — 各自成块(见 BotGrowthLists 的说明)。
-              memory=false 的历史伙伴留一条自己开回来的路;记忆关掉时两个列表一起
-              消失:没有记忆分域,伙伴也长不出本事。 */}
-          <div
-            ref={(el) => {
-              anchorRefs.current.grew = el;
-            }}
-            className="flex scroll-mt-6 flex-col gap-5"
-          >
-            {capabilities.memory ? (
-              <BotGrowthLists
-                botId={bot.id}
-                highlight={highlight}
-                seedEntries={templateSeedEntries}
-              />
-            ) : (
-              <BotSettingsBlock icon={BookMarked} title={t('bots.memoryRecovery.title')}>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="min-w-0 text-11 leading-4 text-[var(--text-tertiary)]">
-                    {t('bots.memoryRecovery.description')}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => updateCapability('memory', true)}
-                    className="h-8 shrink-0 rounded-lg border border-[var(--border-default)] px-3 text-11 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-                  >
-                    {t('bots.memoryRecovery.action')}
-                  </button>
-                </div>
-              </BotSettingsBlock>
-            )}
-          </div>
-
-          {/* "TA 的日程" — 整体嵌入。定时干活是标配(裁决 2026-08-19),这里不再
-              有任何「先开自动化」的前置,也不再需要建完 Routine 回头翻开关。 */}
-          <div
-            ref={(el) => {
-              anchorRefs.current.schedule = el;
-            }}
-            className="scroll-mt-6"
-          >
-            <BotAutomationSettings
-              bot={bot}
-              trusted={bot.capabilities.permissions === 'trusted'}
-              onOpenTask={onOpenSession}
-            />
-          </div>
-
-          {/* "高级" — 单个文字链接展开的内联区块,不是弹窗;深链 ?tab=advanced 及旧
-              7-tab 里落在这里的 capabilities/notifications 会在挂载时自动展开。 */}
+          {/*
+            Hermes 把 model / skills / toolsets / SOUL 收进 Advanced；Grok 的资料页
+            同样只保留身份、描述和通知。Cindy 的渠道、项目、记忆与迁移能力更多，
+            但全部仍属于二级管理面，必须从同一个披露点向下展开，不能一半插到按钮
+            上方、一半落在下方。
+          */}
           <section
             ref={(el) => {
               anchorRefs.current.advanced = el;
@@ -848,25 +731,77 @@ export function BotSettings({
 
             {advancedOpen ? (
               <div className="mt-4 flex flex-col gap-5">
+                <BotSettingsBlock
+                  icon={Sparkles}
+                  title={t('bots.settingsBlocks.can')}
+                  hint={t('bots.settingsBlocks.canDescription')}
+                  blockRef={(el) => {
+                    anchorRefs.current.can = el;
+                    anchorRefs.current.schedule = el;
+                  }}
+                >
+                  <BotAbilityWall
+                    connections={visibleChannelConnections}
+                    isChannelMounted={(connection) => Boolean(mountedChannelFor(connection))}
+                    channelBusyId={channelBusy}
+                    onToggleChannel={(connection) => void toggleChannel(connection)}
+                    onConnectAccount={(kind) => {
+                      const path = botChannelConnectPath(kind);
+                      if (path) navigate(path);
+                    }}
+                  />
+                  {channelError ? (
+                    <p className="mt-3 text-11 text-[var(--text-danger)]">{channelError}</p>
+                  ) : null}
+                </BotSettingsBlock>
+
+                <BotSettingsBlock
+                  icon={FolderGit2}
+                  title={t('bots.settingsBlocks.understand')}
+                  hint={hasFolder ? undefined : t('bots.settingsBlocks.understandDescription')}
+                  blockRef={(el) => {
+                    anchorRefs.current.understand = el;
+                  }}
+                >
+                  <BotFolderCards botId={bot.id} bindings={bot.projectBindings ?? []} />
+                </BotSettingsBlock>
+
+                <div
+                  ref={(el) => {
+                    anchorRefs.current.grew = el;
+                  }}
+                  className="flex scroll-mt-6 flex-col gap-5"
+                >
+                  {capabilities.memory ? (
+                    <BotGrowthLists
+                      botId={bot.id}
+                      highlight={highlight}
+                      seedEntries={templateSeedEntries}
+                    />
+                  ) : (
+                    <BotSettingsBlock icon={BookMarked} title={t('bots.memoryRecovery.title')}>
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="min-w-0 text-11 leading-4 text-[var(--text-tertiary)]">
+                          {t('bots.memoryRecovery.description')}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateCapability('memory', true)}
+                          className="h-8 shrink-0 rounded-lg border border-[var(--border-default)] px-3 text-11 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                        >
+                          {t('bots.memoryRecovery.action')}
+                        </button>
+                      </div>
+                    </BotSettingsBlock>
+                  )}
+                </div>
+
                 <section className={BOT_SETTINGS_BLOCK_CLASS}>
                   <BotSettingsBlockHeading
                     icon={Settings2}
                     title={t('bots.advancedIdentity.title')}
                     hint={`${t('bots.channelLabel')}: ${channelLabel(bot.channel)}`}
                   />
-                  <label className="mt-4 flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
-                    {t('bots.descriptionLabel')}
-                    <textarea
-                      value={description}
-                      onChange={(event) => {
-                        setDescription(event.target.value);
-                        autosave.onEdit('text');
-                      }}
-                      onBlur={() => void autosave.flush()}
-                      rows={3}
-                      className="resize-none rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-13 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
-                    />
-                  </label>
                   <label className="mt-4 flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
                     {t('bots.userContextSourceLabel')}
                     <textarea
@@ -977,7 +912,7 @@ export function BotSettings({
 
                   芯片墙上那两条与开关无关的信息挪到了下面的「任务生命周期」——
                   它们本来讲的就是「Profile 版本 vs 正在跑的任务」,和 Renew 按钮
-                  同属一件事。渠道错误也不再在这里重复,它已经长在「TA 会的」里。
+                  同属一件事。渠道错误也不再在这里重复,它已经长在「能力与连接」里。
                 */}
 
                 {/*
@@ -1139,7 +1074,7 @@ export function BotSettings({
       />
 
       {/*
-        挂载 / 卸载渠道现在同时来自「TA 会的」墙与高级里的能力芯片墙,所以迁移与
+        挂载 / 卸载渠道现在同时来自「能力与连接」与高级能力区,所以迁移与
         回滚确认必须挂在页面根上——两处都可能触发,任何一处都不能因为「高级」当前
         收起就吞掉确认框,用户会看到「点了没反应」。
       */}
@@ -1163,8 +1098,7 @@ export function BotSettings({
                 <div className="rounded-xl bg-[var(--surface-chip)] p-3 text-12 text-[var(--text-secondary)]">
                   <p className="font-medium text-[var(--text-primary)]">
                     {channelLabel(migrationPlan.connection.kind)} ·{' '}
-                    {migrationPlan.connection.accountName ||
-                      migrationPlan.connection.accountKey}
+                    {migrationPlan.connection.accountName || migrationPlan.connection.accountKey}
                   </p>
                   <p className="mt-1">
                     {t('bots.migration.legacyTaskCount', {
@@ -1189,9 +1123,7 @@ export function BotSettings({
                 {migrationPlan.warnings.length > 0 ? (
                   <ul className="list-disc space-y-1 pl-4 text-11 text-[var(--text-secondary)]">
                     {migrationPlan.warnings.map((warning) => (
-                      <li key={warning.code}>
-                        {t(`bots.migration.warnings.${warning.code}`)}
-                      </li>
+                      <li key={warning.code}>{t(`bots.migration.warnings.${warning.code}`)}</li>
                     ))}
                   </ul>
                 ) : null}
@@ -1252,15 +1184,12 @@ export function BotSettings({
                 onClick={() => void confirmRollback()}
                 className="h-8 rounded-lg border border-[var(--border-default)] px-3 text-11 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
               >
-                {channelBusy
-                  ? t('bots.migration.rollingBack')
-                  : t('bots.migration.rollback')}
+                {channelBusy ? t('bots.migration.rollingBack') : t('bots.migration.rollback')}
               </button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-
     </main>
   );
 }
@@ -1320,7 +1249,8 @@ export function BotsHomeView() {
         const result = await window.electronAPI.localDb.bots.compactCanonicalSession({
           botId: bot.id,
           expectedCanonicalSessionId: canonicalSessionId,
-          instructions: 'Keep the Bot identity, durable memory, and active commitments while compacting this Chat.',
+          instructions:
+            'Keep the Bot identity, durable memory, and active commitments while compacting this Chat.',
         });
         if (!result.compacted) return false;
         navigate(`/bots/${bot.id}/session/${canonicalSessionId}`, { replace: true });
@@ -1441,10 +1371,7 @@ export function BotsHomeView() {
   }, [selectedBot, settingsOpen, addRequested, renewCheckedBotId]);
 
   useEffect(() => {
-    if (
-      !selectedBot ||
-      shouldDeferCanonicalBotSessionNavigation({ settingsOpen, addRequested })
-    )
+    if (!selectedBot || shouldDeferCanonicalBotSessionNavigation({ settingsOpen, addRequested }))
       return;
     if (selectedBot.status !== 'active') {
       navigate(`/bots/${selectedBot.id}?settings=1`, { replace: true });
@@ -1533,14 +1460,7 @@ export function BotsHomeView() {
     return () => {
       cancelled = true;
     };
-  }, [
-    addRequested,
-    createCanonicalSession,
-    selectedBot,
-    sessionId,
-    settingsOpen,
-    navigate,
-  ]);
+  }, [addRequested, createCanonicalSession, selectedBot, sessionId, settingsOpen, navigate]);
 
   if (!selectedBot) {
     // 一个伙伴都没有 → 主区直接就是阵容页,没有中间那一层。
