@@ -62,6 +62,16 @@ export interface BotDeliveryOutboxServiceDeps {
   createId?: () => string;
   maxAttempts?: number;
   sendingLeaseMs?: number;
+  /**
+   * Watchdog budget for one `deliver` call. An adapter that never settles
+   * must not pin the serial drain loop (and with it every Bot's queue), so a
+   * timed-out attempt is failed like any retryable error and retried with the
+   * normal backoff. Idempotent transports stay safe: the existing
+   * `recordExternalDispatch({ retrySafe: false })` marker still converts a
+   * timeout into a dead-letter `DELIVERY_OUTCOME_UNKNOWN` instead of a retry.
+   * Defaults to `sendingLeaseMs`.
+   */
+  deliverTimeoutMs?: number;
   onChanged?: (payload: { botId: string; deliveryId?: string }) => void;
   /** Release payload-owned resources after the row becomes non-retryable. */
   releaseResources?: (
@@ -122,9 +132,12 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
   const createId = deps.createId ?? randomUUID;
   const maxAttempts = Math.max(1, deps.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
   const sendingLeaseMs = Math.max(1_000, deps.sendingLeaseMs ?? DEFAULT_SENDING_LEASE_MS);
+  const deliverTimeoutMs = Math.max(1_000, deps.deliverTimeoutMs ?? sendingLeaseMs);
   const noteAttention = deps.noteAttention ?? noteBotAttention;
   const clearAttention = deps.clearAttention ?? clearBotAttention;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let requeueTimer: ReturnType<typeof setInterval> | null = null;
+  let requeueSweepRunning = false;
   let drainPromise: Promise<void> | null = null;
   let disposed = false;
 
@@ -135,6 +148,11 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
   const clearTimer = (): void => {
     if (timer) clearTimeout(timer);
     timer = null;
+  };
+
+  const clearRequeueTimer = (): void => {
+    if (requeueTimer) clearInterval(requeueTimer);
+    requeueTimer = null;
   };
 
   const scheduleDrain = (delayMs = 0): void => {
@@ -227,6 +245,14 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
       .returning({ botId: botDeliveryOutbox.botId });
     if (updated) {
       emitChanged(updated.botId, row.id);
+      log.warn('Bot delivery attempt failed', {
+        deliveryId: row.id,
+        botId: updated.botId,
+        attempt: row.attempts,
+        errorCode: result.errorCode,
+        retryable: result.retryable,
+        terminal,
+      });
       await noteAttention({
         botId: updated.botId,
         failure: { errorCode: result.errorCode, message: result.message },
@@ -277,12 +303,13 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
     return false;
   };
 
-  const requeueExpiredSending = async (): Promise<void> => {
+  const requeueExpiredSending = async (): Promise<number> => {
     const at = now();
     const db = getDbClient().drizzle;
     const stale = await db
       .select({
         id: botDeliveryOutbox.id,
+        botId: botDeliveryOutbox.botId,
         deliveryReceiptJson: botDeliveryOutbox.deliveryReceiptJson,
       })
       .from(botDeliveryOutbox)
@@ -292,6 +319,7 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
           lte(botDeliveryOutbox.updatedAt, at - sendingLeaseMs),
         ),
       );
+    let requeued = 0;
     for (const row of stale) {
       let retrySafe = true;
       try {
@@ -306,7 +334,7 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
         // A malformed diagnostic marker must not turn an otherwise recoverable
         // pre-dispatch lease into permanent message loss.
       }
-      await db
+      const write = await db
         .update(botDeliveryOutbox)
         .set(
           retrySafe
@@ -325,8 +353,47 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
             eq(botDeliveryOutbox.status, 'sending'),
             lte(botDeliveryOutbox.updatedAt, at - sendingLeaseMs),
           ),
-        );
+        )
+        .returning({ id: botDeliveryOutbox.id });
+      if (write.length > 0) {
+        log.warn('Bot delivery sending lease expired; requeued for retry', {
+          deliveryId: row.id,
+          botId: row.botId,
+          retrySafe,
+        });
+        requeued += 1;
+      }
     }
+    if (requeued > 0) scheduleDrain(0);
+    return requeued;
+  };
+
+  /**
+   * Reclaim expired `sending` leases on a dedicated interval, decoupled from
+   * drain liveness. The drain loop used to be the only driver of
+   * `requeueExpiredSending`, so one adapter call that never settled starved
+   * the lease reclaim with it (PR #2829 QA: the queue was dead for 64 minutes
+   * while the 60s lease was never enforced). Overlapping a live drain is
+   * harmless: the reclaim CAS still requires the row to be `sending` with an
+   * expired `updatedAt`.
+   */
+  const startRequeueSweeper = (): void => {
+    if (disposed || requeueTimer) return;
+    const intervalMs = Math.max(1_000, Math.floor(sendingLeaseMs / 2));
+    requeueTimer = setInterval(() => {
+      if (requeueSweepRunning) return;
+      requeueSweepRunning = true;
+      void requeueExpiredSending()
+        .catch((error) => {
+          log.warn('Bot delivery lease sweep failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        })
+        .finally(() => {
+          requeueSweepRunning = false;
+        });
+    }, intervalMs);
+    requeueTimer.unref?.();
   };
 
   const claimNext = async (): Promise<{
@@ -409,6 +476,13 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
         continue;
       }
       if (!(await validateRouteOwnership(claimed.row))) continue;
+      log.info('Bot delivery attempt started', {
+        deliveryId: claimed.row.id,
+        botId: claimed.row.botId,
+        kind: payload.kind,
+        attempt: claimed.row.attempts,
+      });
+      const attemptStartedAt = now();
       let result: BotDeliveryAttemptResult;
       const attemptState: {
         externalDispatch: { retrySafe: boolean; transport: string; startedAt: number } | null;
@@ -439,21 +513,69 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
           .returning({ id: botDeliveryOutbox.id });
         if (!updated) throw new Error('Bot delivery claim was lost during external dispatch');
       };
+      const deliverPromise = deps.deliver(claimed.row, payload, {
+        recordExternalDispatch: async (input) => {
+          attemptState.externalDispatch = {
+            retrySafe: input.retrySafe,
+            transport: input.transport.trim() || 'unknown',
+            startedAt: now(),
+          };
+          await persistAttemptReceipt();
+        },
+        recordProgress: async (receipt) => {
+          attemptState.progress = { ...attemptState.progress, ...receipt };
+          await persistAttemptReceipt();
+        },
+      });
       try {
-        result = await deps.deliver(claimed.row, payload, {
-          recordExternalDispatch: async (input) => {
-            attemptState.externalDispatch = {
-              retrySafe: input.retrySafe,
-              transport: input.transport.trim() || 'unknown',
-              startedAt: now(),
+        if (deliverTimeoutMs > 0) {
+          let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+          const timeout = new Promise<null>((resolve) => {
+            timeoutHandle = setTimeout(() => resolve(null), deliverTimeoutMs);
+            timeoutHandle.unref?.();
+          });
+          const settled = await Promise.race([
+            deliverPromise.then((value) => {
+              if (timeoutHandle) clearTimeout(timeoutHandle);
+              return value;
+            }),
+            timeout,
+          ]);
+          if (settled === null) {
+            log.warn('Bot delivery attempt timed out', {
+              deliveryId: claimed.row.id,
+              botId: claimed.row.botId,
+              kind: payload.kind,
+              attempt: claimed.row.attempts,
+              deliverTimeoutMs,
+            });
+            // The abandoned adapter call may still settle later. Its own state
+            // writes CAS on `status = 'sending'`, which no longer matches after
+            // the failure below, so it cannot resurrect or duplicate the row;
+            // observe the late settlement purely for diagnostics.
+            void deliverPromise.then(
+              (lateResult) => log.warn('Bot delivery attempt settled after timeout', {
+                deliveryId: claimed.row.id,
+                ok: lateResult.ok,
+                errorCode: lateResult.ok ? null : lateResult.errorCode,
+              }),
+              (lateError) => log.warn('Bot delivery attempt failed after timeout', {
+                deliveryId: claimed.row.id,
+                error: lateError instanceof Error ? lateError.message : String(lateError),
+              }),
+            ).catch(() => undefined);
+            result = {
+              ok: false,
+              retryable: true,
+              errorCode: 'DELIVERY_TIMEOUT',
+              message: `deliver did not settle within ${deliverTimeoutMs}ms`,
             };
-            await persistAttemptReceipt();
-          },
-          recordProgress: async (receipt) => {
-            attemptState.progress = { ...attemptState.progress, ...receipt };
-            await persistAttemptReceipt();
-          },
-        });
+          } else {
+            result = settled;
+          }
+        } else {
+          result = await deliverPromise;
+        }
       } catch (error) {
         result = {
           ok: false,
@@ -475,8 +597,18 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
             `${result.errorCode}: ${result.message}; local adapter may already have delivered, so automatic retry was suppressed`,
         };
       }
-      if (result.ok) await markTerminal(claimed.row.id, 'delivered', null, result.receipt);
-      else await markFailure(claimed.row, result);
+      if (result.ok) {
+        log.info('Bot delivery attempt delivered', {
+          deliveryId: claimed.row.id,
+          botId: claimed.row.botId,
+          kind: payload.kind,
+          attempt: claimed.row.attempts,
+          elapsedMs: now() - attemptStartedAt,
+        });
+        await markTerminal(claimed.row.id, 'delivered', null, result.receipt);
+      } else {
+        await markFailure(claimed.row, result);
+      }
     }
     await scheduleNextDue();
     if (processed >= 100) scheduleDrain(0);
@@ -876,7 +1008,10 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
   const dispose = (): void => {
     disposed = true;
     clearTimer();
+    clearRequeueTimer();
   };
+
+  startRequeueSweeper();
 
   return {
     enqueue,
