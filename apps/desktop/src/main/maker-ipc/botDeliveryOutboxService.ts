@@ -513,20 +513,25 @@ export function createBotDeliveryOutboxService(deps: BotDeliveryOutboxServiceDep
           .returning({ id: botDeliveryOutbox.id });
         if (!updated) throw new Error('Bot delivery claim was lost during external dispatch');
       };
-      const deliverPromise = deps.deliver(claimed.row, payload, {
-        recordExternalDispatch: async (input) => {
-          attemptState.externalDispatch = {
-            retrySafe: input.retrySafe,
-            transport: input.transport.trim() || 'unknown',
-            startedAt: now(),
-          };
-          await persistAttemptReceipt();
-        },
-        recordProgress: async (receipt) => {
-          attemptState.progress = { ...attemptState.progress, ...receipt };
-          await persistAttemptReceipt();
-        },
-      });
+      // Promise.resolve().then(...) also captures an adapter that throws before
+      // returning its Promise, so one synchronous transport bug is handled by
+      // the same retry/timeout path instead of rejecting the whole drain.
+      const deliverPromise = Promise.resolve().then(() =>
+        deps.deliver(claimed.row, payload, {
+          recordExternalDispatch: async (input) => {
+            attemptState.externalDispatch = {
+              retrySafe: input.retrySafe,
+              transport: input.transport.trim() || 'unknown',
+              startedAt: now(),
+            };
+            await persistAttemptReceipt();
+          },
+          recordProgress: async (receipt) => {
+            attemptState.progress = { ...attemptState.progress, ...receipt };
+            await persistAttemptReceipt();
+          },
+        }),
+      );
       try {
         if (deliverTimeoutMs > 0) {
           let timeoutHandle: ReturnType<typeof setTimeout> | null = null;

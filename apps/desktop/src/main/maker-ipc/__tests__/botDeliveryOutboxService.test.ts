@@ -134,6 +134,47 @@ describe('botDeliveryOutboxService', () => {
     }
   });
 
+  it('turns a synchronous adapter throw into a retryable failure and keeps draining', async () => {
+    let clock = 10_000;
+    let seq = 0;
+    const deliver = vi
+      .fn<Parameters<typeof createBotDeliveryOutboxService>[0]['deliver']>()
+      .mockImplementationOnce(() => {
+        throw new Error('adapter setup failed');
+      })
+      .mockResolvedValue({ ok: true });
+    const service = createBotDeliveryOutboxService({
+      ...baseDeps,
+      deliver,
+      now: () => clock,
+      createId: () => `id-${++seq}`,
+      deliverTimeoutMs: 1_000,
+    });
+    try {
+      const first = await service.enqueue({
+        botId: 'bot-1',
+        idempotencyKey: 'sync-throw-1',
+        sessionId: 's1',
+        payload: sessionPayload(1),
+      });
+      clock += 10;
+      const second = await service.enqueue({
+        botId: 'bot-2',
+        idempotencyKey: 'sync-throw-2',
+        sessionId: 's2',
+        payload: sessionPayload(2),
+      });
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(readRow(first.id)).toMatchObject({ status: 'failed', attempts: 1 });
+      expect(readRow(first.id).lastError).toContain('DELIVERY_EXCEPTION');
+      expect(readRow(second.id)).toMatchObject({ status: 'delivered', attempts: 1 });
+      expect(deliver).toHaveBeenCalledTimes(2);
+    } finally {
+      service.dispose();
+    }
+  });
+
   it('reclaims an expired sending lease even while the drain loop is stuck', async () => {
     let clock = 10_000;
     let seq = 0;
