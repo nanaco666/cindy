@@ -2609,15 +2609,11 @@ describe('Bot canonical Session lifecycle', () => {
       },
     );
     const abortSession = vi.fn(async () => undefined);
-    const archiveSession = vi.fn(async (sessionId: string) => {
-      h.sqlite!.prepare("UPDATE sessions SET status = 'archived' WHERE id = ?").run(sessionId);
-    });
     const closeSession = vi.fn(async () => undefined);
     const broadcastSessionCreated = vi.fn();
     const service = createBotDelegationService({
       dispatch,
       abortSession,
-      archiveSession,
       closeSession,
       broadcastSessionCreated,
       now: () => 1_000,
@@ -2708,7 +2704,8 @@ describe('Bot canonical Session lifecycle', () => {
           message: expect.stringContaining('All supported clients remain compatible.'),
         }),
       );
-      expect(archiveSession).toHaveBeenCalledWith('session-3');
+      // 子任务归档由 bots.finishDelegation tx 在同一事务内完成(旧接线走通用
+      // sessions.setStatus 被 bot 守卫拒单,错误还被吞掉 —— PR #2829 QA 缺陷 B)。
       expect(closeSession).toHaveBeenCalledWith('session-3');
       expect(
         h.sqlite!.prepare('SELECT status FROM sessions WHERE id = ?').pluck().get('session-3'),
@@ -5375,9 +5372,6 @@ describe('Bot teammate collaboration', () => {
     const service = createBotDelegationService({
       dispatch,
       abortSession: vi.fn(async () => undefined),
-      archiveSession: vi.fn(async (sessionId: string) => {
-        h.sqlite!.prepare("UPDATE sessions SET status = 'archived' WHERE id = ?").run(sessionId);
-      }),
       closeSession: vi.fn(async () => undefined),
       broadcastSessionCreated: vi.fn(),
       markTimelineMessage,
@@ -5647,9 +5641,6 @@ describe('Bot teammate collaboration', () => {
         wakeKind: 'already-active' as const,
       })),
       abortSession: vi.fn(async () => undefined),
-      archiveSession: vi.fn(async (sessionId: string) => {
-        h.sqlite!.prepare("UPDATE sessions SET status = 'archived' WHERE id = ?").run(sessionId);
-      }),
       now: () => 55_000,
     });
     try {
@@ -5819,9 +5810,6 @@ describe('Bot delegation end-to-end runtime', () => {
       dispatch,
       enqueueDelivery: (params) => outbox.enqueue(params),
       abortSession: vi.fn(async () => undefined),
-      archiveSession: async (sessionId: string) => {
-        h.sqlite!.prepare("UPDATE sessions SET status = 'archived' WHERE id = ?").run(sessionId);
-      },
       closeSession: vi.fn(async () => undefined),
       broadcastSessionCreated: vi.fn(),
       onChanged: (payload) => {

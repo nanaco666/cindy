@@ -134,7 +134,6 @@ export interface BotDelegationServiceDeps {
     };
   }) => Promise<{ id: string }>;
   abortSession: (sessionId: string) => Promise<void>;
-  archiveSession?: (sessionId: string) => Promise<void>;
   closeSession?: (sessionId: string) => Promise<void>;
   broadcastSessionCreated?: (sessionId: string) => void;
   persistTimelineMessage?: (params: {
@@ -1042,12 +1041,9 @@ export function createBotDelegationService(deps: BotDelegationServiceDeps) {
         if (params.abortChild) {
           await deps.abortSession(updated.childSessionId).catch(() => undefined);
         }
-        await (deps.archiveSession?.(updated.childSessionId) ?? db
-          .update(sessions)
-          .set({ status: 'archived', updatedAt: at })
-          .where(eq(sessions.id, updated.childSessionId))
-          .then(() => undefined))
-          .catch(() => undefined);
+        // 子任务归档由 bots.finishDelegation 在同一事务内完成(见该 tx op 的注释),
+        // 不再另走通用 sessions.setStatus —— 那条通道对 source='bot' 的行会拒单,
+        // 归档失败也不会被吞掉:任何失败都会让整个终态事务回滚并往上抛。
         await deps.closeSession?.(updated.childSessionId).catch(() => undefined);
         schedulePerTaskWorkspaceReclaim(updated.childSessionId);
       }

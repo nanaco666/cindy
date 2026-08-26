@@ -300,7 +300,6 @@ import {
   getSessionRowSnapshotStrict,
   persistSessionFields,
   recycleSessionWorktreeForStatusChange,
-  setSessionsStatusInDb,
   setSessionRuntimeCleanup,
 } from '../localDb/ipc/sessions.js';
 // sidebar-card-mode: turn-done 后刷新列表预览,并按需生成置顶卡片摘要
@@ -10751,9 +10750,6 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
       const session = maker.getSession(sessionId);
       if (session?.isTurnRunning?.()) await session.abort();
     }),
-    archiveSession: async (sessionId) => {
-      await setSessionsStatusInDb([sessionId], 'archived');
-    },
     closeSession: (sessionId) => maker.closeSession(sessionId),
     broadcastSessionCreated,
     markTimelineMessage: async ({ sessionId, clientId, agentMeta }) => {

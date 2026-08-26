@@ -983,6 +983,16 @@ function botsFinishDelegation(
       | undefined;
     if (!row) return null;
     if (row.childSessionId) {
+      // The delegation terminal transition owns its child task's terminal
+      // archive: `sessions.setStatus` refuses `source = 'bot'` rows on purpose
+      // (generic UI archive must not bypass Bot lifecycle bookkeeping), so the
+      // archive has to happen in this very transaction. Doing it anywhere else
+      // (a follow-up generic write that can also be swallowed) leaves the
+      // child task `active` forever and the guardian reports a supervision
+      // anomaly (PR #2829 QA).
+      db.prepare(`UPDATE sessions SET status = 'archived', updated_at = ?
+        WHERE id = ? AND source = 'bot' AND status = 'active'`)
+        .run(completedAt, row.childSessionId);
       db.prepare(`UPDATE bot_session_links SET role = 'history', channel_id = NULL,
         route_key = NULL, archived_at = ? WHERE session_id = ?`)
         .run(completedAt, row.childSessionId);
