@@ -518,8 +518,25 @@ function readProfiles(): BotProfile[] {
 let profiles = readProfiles();
 const listeners = new Set<() => void>();
 let hydrated = false;
+const hydrationPromises = new Set<Promise<void>>();
+const deletingBotIds = new Set<string>();
 /** 每个伙伴各自的写入代际 —— 见 updateBotProfile 里的 isLatestWrite。 */
 const profileWriteGenerations = new Map<string, number>();
+
+function trackHydration(): void {
+  const promise = hydrateFromDatabase();
+  hydrationPromises.add(promise);
+  void promise.then(
+    () => hydrationPromises.delete(promise),
+    () => hydrationPromises.delete(promise),
+  );
+}
+
+async function waitForHydration(): Promise<void> {
+  while (hydrationPromises.size > 0) {
+    await Promise.all([...hydrationPromises]);
+  }
+}
 
 function emit(): void {
   for (const listener of listeners) listener();
@@ -719,6 +736,12 @@ async function hydrateFromDatabase(): Promise<void> {
     const migrationCandidates = migrationComplete ? [] : [...profiles];
     let migrationPending = false;
     for (const old of migrationCandidates) {
+      if (
+        deletingBotIds.has(old.id)
+        || !profiles.some((profile) => profile.id === old.id)
+      ) {
+        continue;
+      }
       try {
         await api.migrateLegacy({
           id: old.id,
@@ -766,11 +789,11 @@ async function hydrateFromDatabase(): Promise<void> {
   }
 }
 
-void hydrateFromDatabase();
+trackHydration();
 
 export function refreshBotProfiles(): void {
   hydrated = false;
-  void hydrateFromDatabase();
+  trackHydration();
 }
 
 export async function exportBotBundle(botId: string): Promise<BotBundleExportResult> {
@@ -803,21 +826,33 @@ export async function getBotHealth(botId: string): Promise<BotHealthReport> {
 export async function runBotLifecycleAction(
   request: import('../../../shared/botLifecycle').BotLifecycleActionRequest,
 ): Promise<import('../../../shared/botLifecycle').BotLifecycleActionResult> {
-  const result = await window.electronAPI.maker.runBotLifecycleAction(request);
-  const api = botsApi();
-  if (result.status === 'deleted') {
-    profiles = profiles.filter((bot) => bot.id !== request.botId);
-    persist();
-    return result;
+  const isDelete = request.action === 'delete';
+  if (isDelete) {
+    // Legacy migration can still be writing a profile when the first renderer
+    // opens. Let it finish before deleting, otherwise its stale snapshot can
+    // recreate the Bot immediately after the delete transaction commits.
+    await waitForHydration();
+    deletingBotIds.add(request.botId);
   }
-  if (api) {
-    const refreshed = normalizeDbProfile(await api.get(request.botId));
-    if (refreshed) {
-      profiles = profiles.map((bot) => (bot.id === request.botId ? refreshed : bot));
+  try {
+    const result = await window.electronAPI.maker.runBotLifecycleAction(request);
+    const api = botsApi();
+    if (result.status === 'deleted') {
+      profiles = profiles.filter((bot) => bot.id !== request.botId);
       persist();
+      return result;
     }
+    if (api) {
+      const refreshed = normalizeDbProfile(await api.get(request.botId));
+      if (refreshed) {
+        profiles = profiles.map((bot) => (bot.id === request.botId ? refreshed : bot));
+        persist();
+      }
+    }
+    return result;
+  } finally {
+    if (isDelete) deletingBotIds.delete(request.botId);
   }
-  return result;
 }
 
 export function getBotProfiles(): BotProfile[] {
