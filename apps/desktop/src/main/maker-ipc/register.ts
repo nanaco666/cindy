@@ -3020,50 +3020,16 @@ const pendingFailedTurnAssistantPersistId = new Map<string, string>();
  * Session.getStatus() 的 lifecycle (active/closed)，也不同于 terminal 后短暂保留的
  * background-throttling keepalive。
  */
-const sendToSessionLocks = new Map<string, Promise<unknown>>();
-
-/**
- * Acquire the per-session send/route lock until the returned release callback runs.
- *
- * Direct-send callers need this lease form because applying a deferred agent switch,
- * refreshing the resulting live Session, and calling Session.send happen in different
- * modules but must remain one atomic route decision.
- */
-async function acquireSendToSessionLock(sessionId: string): Promise<() => void> {
-  const previous = sendToSessionLocks.get(sessionId);
-  const waitPrevious = previous ? previous.catch(() => undefined) : Promise.resolve();
-  let releaseGate!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    releaseGate = resolve;
-  });
-  const run = waitPrevious.then(() => gate);
-  const tracked = run.finally(() => {
-    if (sendToSessionLocks.get(sessionId) === tracked) {
-      sendToSessionLocks.delete(sessionId);
-    }
-  });
-  sendToSessionLocks.set(sessionId, tracked);
-  await waitPrevious;
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    releaseGate();
-  };
-}
-
-/** Serialize every local send / runtime release / route mutation for one session. */
-export async function withSendToSessionLock<T>(
-  sessionId: string,
-  task: () => Promise<T>,
-): Promise<T> {
-  const release = await acquireSendToSessionLock(sessionId);
-  try {
-    return await task();
-  } finally {
-    release();
-  }
-}
+// per-session send/route 锁本体(含 30s 泄漏告警 + 5min 强制 bail 的 watchdog)已抽到
+// sendToSessionLock.ts 以便单测;此处保留 re-export 与 map 引用以维持既有导入面。
+import {
+  acquireSendToSessionLock,
+  hasSendToSessionLock,
+  sendToSessionLocks,
+  trackSendToSessionLockRun,
+  withSendToSessionLock,
+} from './sendToSessionLock.js';
+export { acquireSendToSessionLock, hasSendToSessionLock, withSendToSessionLock };
 
 let agentInputCoordinatorHolder: AgentInputCoordinator | null = null;
 let contextOverflowRolloverHolder: ReturnType<typeof createContextOverflowRollover> | null = null;
@@ -10100,6 +10066,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
 
     const prev = sendToSessionLocks.get(targetSessionId);
     const waitPrev = prev ? prev.catch(() => undefined) : Promise.resolve();
+    // lockStage 只为 sendToSessionLock 的泄漏告警服务:标出临界区内当前挂在哪个
+    // await 上,日志即可直接定位挂点(PR #2829 QA:回执 deliver 挂死 64 分钟零线索)。
+    let lockStage = 'resolve-session-meta+row';
     const run = waitPrev.then(async () => {
       const [meta, dbRow] = await Promise.all([
         maker.getSessionMeta(targetSessionId).catch(() => null),
@@ -10130,8 +10099,10 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
 
       // 崩溃恢复:在路由决策前加载快照,确保恢复的排队 prompt 不被跳过。
       // 失败时 shouldQueueNewTurn 仍返回 true(未恢复即入队),消息不丢。
+      lockStage = 'queue-restore';
       await inputCoordinator.ensureQueueRestored(targetSessionId).catch(() => undefined);
       if (inputCoordinator.shouldQueueNewTurn(targetSessionId)) {
+        lockStage = 'enqueue-queued-message';
         const qClientId = explicitClientId ?? createId();
         await enqueueSendToSessionMessage({
           targetSessionId,
@@ -10181,10 +10152,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
         await runAcceptedCallback(onAccepted, targetSessionId, clientId);
       };
 
+      lockStage = 'prepare-unhealthy-session';
       await contextOverflowRolloverHolder?.prepareUnhealthySession(targetSessionId);
       let live = maker.getSession(targetSessionId);
       if (live) {
         if (live.isTurnRunning?.()) {
+          lockStage = 'enqueue-queued-message';
           await enqueueSendToSessionMessage({
             targetSessionId,
             message,
@@ -10217,6 +10190,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
           live.agentKind === 'codex' &&
           hasPendingRemoteMcpDrift(live.remoteHostId, codexRemoteDriftOpts())
         ) {
+          lockStage = 'remote-drift-ensure';
           const ensureResult = await ensureRemoteReadyForSessionStart({ session: live });
           // ensure 完整生效 ⇒ daemon 已 (重) bootstrap ⇒ 长命 transport
           // (到旧 daemon socket 的 proxy channel) 已死 — 继续用 live 直发
@@ -10254,6 +10228,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
           live.agentKind === 'claude-code' &&
           getRemoteCcStaleQuery()?.(live.id) === true
         ) {
+          lockStage = 'remote-cc-detach';
           try {
             await live.detach();
           } catch (err) {
@@ -10268,6 +10243,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
         }
       }
       if (live) {
+        lockStage = 'live-send';
         try {
           const sendResult = await sendUserMessageWithAwaitedGitBaseline(live, message, clientId, {
             planMode: false,
@@ -10341,6 +10317,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
         }
       }
 
+      lockStage = 'lazy-resume-bootstrap';
       try {
         const createOpts = buildCreateOptsWithStderr({
           id: targetSessionId,
@@ -10444,13 +10421,10 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
       }
     });
 
-    const tracked = run.finally(() => {
-      if (sendToSessionLocks.get(targetSessionId) === tracked) {
-        sendToSessionLocks.delete(targetSessionId);
-      }
-    });
-    sendToSessionLocks.set(targetSessionId, tracked);
-    return tracked;
+    // 锁条目改由 trackSendToSessionLockRun 安装:run 挂死超过 5min 时条目强制 bail,
+    // 后续 outbox 重试 / guardian dispatch / worker idle-close 不再被僵尸条目糊死;
+    // 告警日志携带 lockStage 定位挂点。返回值仍是 run 本体,调用方观察到真实结果。
+    return trackSendToSessionLockRun(targetSessionId, run, () => lockStage);
   }
 
   const dispatchBotSessionMessage = async (params: {
