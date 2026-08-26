@@ -43,14 +43,31 @@ describe('bot profile store', () => {
    * 自造一份默认口径」:2026-08-21 用户实测发现全新安装的伙伴一律显示一个写死的
    * 型号,与选择器无关。
    */
-  it('falls back to the model catalog default, never a hardcoded id', () => {
+  it('falls back to the model catalog default for a new Claude Bot, never a hardcoded id', () => {
     expect(getPersistedVendorModel('cc')).toBeFalsy();
 
-    const bot = addBotProfile({ name: 'Brand new', channel: 'local', description: '' });
+    const bot = addBotProfile({
+      name: 'Brand new',
+      channel: 'local',
+      description: '',
+      capabilities: { harness: 'claude' },
+    });
     createdIds.push(bot.id);
 
     expect(getDefaultModelForVendor).toHaveBeenCalledWith('cc');
     expect(bot.capabilities.model).toBe('catalog-new-session-default');
+  });
+
+  it('defaults new Bots to Pi DeepSeek V4 Flash', () => {
+    const bot = addBotProfile({ name: 'Pi Bot', channel: 'local', description: '' });
+    createdIds.push(bot.id);
+
+    expect(bot.capabilities).toMatchObject({
+      harness: 'pi',
+      model: 'deepseek-v4-flash',
+      providerId: 'deepseek',
+      effort: 'high',
+    });
   });
 
   it('creates new Bots hands-on by default, and never with memory turned off', () => {

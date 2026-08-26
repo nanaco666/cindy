@@ -2,6 +2,12 @@ import { useSyncExternalStore } from 'react';
 import { getDraft, getPersistedVendorModel } from '@/state/newMakerDraft';
 import { getDefaultModelForVendor } from '@/lib/modelDefinitions';
 import {
+  NEW_BOT_DEFAULT_HARNESS,
+  NEW_BOT_DEFAULT_PI_EFFORT,
+  NEW_BOT_DEFAULT_PI_MODEL,
+  NEW_BOT_DEFAULT_PI_PROVIDER,
+} from '../../../shared/botDefaults';
+import {
   getBotLastReadAtMap,
   pruneBotReadState,
   seedMissingBotReadState,
@@ -298,6 +304,7 @@ const SQLITE_MIGRATION_KEY = 'cindy.bots.v1.sqlite-migrated';
  */
 export function defaultBotModel(vendor: ReturnType<typeof vendorForHarness>): string {
   // `||` 不是 `??`:「没选过」在 getPersistedVendorModel 里是空串,不是 null。
+  if (vendor === 'pi') return getPersistedVendorModel(vendor) || NEW_BOT_DEFAULT_PI_MODEL;
   return getPersistedVendorModel(vendor) || getDefaultModelForVendor(vendor).id;
 }
 
@@ -340,10 +347,15 @@ export function getEffectiveBotModelSettings(
 ): BotModelOverride {
   const selected = override ?? getBotGlobalModelOverride(vendor);
   if (selected) return selected;
-  const model = getDefaultModelForVendor(vendor);
+  const model = vendor === 'pi'
+    ? {
+        id: NEW_BOT_DEFAULT_PI_MODEL,
+        defaultEffort: NEW_BOT_DEFAULT_PI_EFFORT,
+      }
+    : getDefaultModelForVendor(vendor);
   return {
     model: model.id,
-    providerId: null,
+    providerId: vendor === 'pi' ? NEW_BOT_DEFAULT_PI_PROVIDER : null,
     effort: model.defaultEffort ?? '',
     fastMode: false,
   };
@@ -870,7 +882,9 @@ export function useBotProfiles(): BotProfile[] {
 
 export function addBotProfile(input: CreateBotProfileInput): BotProfile {
   const now = Date.now();
-  const harness = normalizeBotHarness(input.capabilities?.harness);
+  const harness = normalizeBotHarness(
+    input.capabilities?.harness ?? NEW_BOT_DEFAULT_HARNESS,
+  );
   const capabilities = {
     ...defaultCapabilities(harness),
     ...(input.capabilities ?? {}),

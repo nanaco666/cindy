@@ -2,6 +2,12 @@ import type { BotAvatarHue } from './BotAvatar';
 // Imported from the leaf module, not from BotAvatar.tsx: this file is also loaded
 // by plain-Node tooling that cannot resolve the bundled portrait asset.
 import { CINDY_OFFICIAL_AVATAR, presetAvatarValue } from './botAvatarIdentity';
+import {
+  NEW_BOT_DEFAULT_HARNESS,
+  NEW_BOT_DEFAULT_PI_EFFORT,
+  NEW_BOT_DEFAULT_PI_MODEL,
+  NEW_BOT_DEFAULT_PI_PROVIDER,
+} from '../../../shared/botDefaults';
 import { NEW_BOT_DEFAULT_PERMISSIONS } from './botCapabilityDefaults';
 import { BOT_AUTOMATION_DEFAULT } from '../../../shared/botAutomationCapability';
 import type { BotGender } from '../../../shared/botGender';
@@ -104,7 +110,10 @@ function seedMemory(
  * 模板,但它的能力配置不该另起一套 —— 和阵容里的普通助理一模一样就对了。
  */
 export const ASSISTANT_BASELINE_CAPABILITIES: Partial<BotCapabilities> = {
-  harness: 'claude',
+  harness: NEW_BOT_DEFAULT_HARNESS,
+  model: NEW_BOT_DEFAULT_PI_MODEL,
+  providerId: NEW_BOT_DEFAULT_PI_PROVIDER,
+  effort: NEW_BOT_DEFAULT_PI_EFFORT,
   automation: BOT_AUTOMATION_DEFAULT,
   sessionControlMode: 'none',
   permissions: NEW_BOT_DEFAULT_PERMISSIONS,
@@ -113,7 +122,10 @@ export const ASSISTANT_BASELINE_CAPABILITIES: Partial<BotCapabilities> = {
 const ASSISTANT_CAPABILITIES = ASSISTANT_BASELINE_CAPABILITIES;
 
 const COORDINATOR_CAPABILITIES: Partial<BotCapabilities> = {
-  harness: 'claude',
+  harness: NEW_BOT_DEFAULT_HARNESS,
+  model: NEW_BOT_DEFAULT_PI_MODEL,
+  providerId: NEW_BOT_DEFAULT_PI_PROVIDER,
+  effort: NEW_BOT_DEFAULT_PI_EFFORT,
   automation: BOT_AUTOMATION_DEFAULT,
   sessionControlMode: 'coordinate',
   permissions: NEW_BOT_DEFAULT_PERMISSIONS,

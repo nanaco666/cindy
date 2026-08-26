@@ -39,6 +39,17 @@ describe('Bot roster templates', () => {
     }
   });
 
+  it('uses Pi DeepSeek V4 Flash as the default for every new roster character', () => {
+    for (const template of BOT_TEMPLATES) {
+      expect(template.capabilities, template.id).toMatchObject({
+        harness: 'pi',
+        model: 'deepseek-v4-flash',
+        providerId: 'deepseek',
+        effort: 'high',
+      });
+    }
+  });
+
   it('keeps Hermes-style identity separate from structured capabilities', () => {
     for (const template of BOT_TEMPLATES) {
       expect(template.identitySource.trim()).not.toBe('');

@@ -588,6 +588,33 @@ describe('Bot canonical Session lifecycle', () => {
     });
   });
 
+  it('uses the Pi DeepSeek V4 Flash fallback for a Pi Bot without a model', async () => {
+    await invoke('local-db:bots:create', {
+      id: 'bot-pi-default',
+      name: 'Pi Default Bot',
+      capabilities: {
+        harness: 'pi',
+        providerId: 'deepseek',
+        model: '',
+        effort: 'high',
+        permissions: 'ask',
+      },
+    });
+
+    const created = await invoke('local-db:bots:create-canonical-session', {
+      botId: 'bot-pi-default',
+      expectedCanonicalSessionId: null,
+      expectedProfileVersion: 1,
+    });
+
+    expect(created.session).toMatchObject({
+      agentKind: 'pi',
+      providerId: 'deepseek',
+      model: 'deepseek-v4-flash',
+      effort: 'high',
+    });
+  });
+
   it('repairs a physically missing canonical task using the persisted pointer as its CAS', async () => {
     h.sqlite!.pragma('foreign_keys = OFF');
     h.sqlite!

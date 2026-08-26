@@ -50,6 +50,7 @@ import { syncBotProfileFromFolder } from '../../maker-ipc/botProfileFolderSync.j
 import { renewBotSessionIfDue } from '../../maker-ipc/botRenewalService.js';
 import { requestBotRuntimeEpochRefresh } from '../../maker-ipc/botRuntimeEpochRefreshSignal.js';
 import { createLogger } from '../../logger.js';
+import { NEW_BOT_DEFAULT_PI_MODEL } from '../../../shared/botDefaults.js';
 
 const log = createLogger('bots');
 
@@ -270,6 +271,10 @@ async function cancelBotDelegationChildren(sessionId: string, reason: string): P
 
 function botSessionAgentKind(config: Record<string, unknown>): 'cc' | 'codex' | 'pi' {
   return config.harness === 'codex' ? 'codex' : config.harness === 'pi' ? 'pi' : 'cc';
+}
+
+function defaultBotModelForConfig(config: Record<string, unknown>): string {
+  return botSessionAgentKind(config) === 'pi' ? NEW_BOT_DEFAULT_PI_MODEL : 'claude-sonnet-4-6';
 }
 
 function botSessionPermissionMode(config: Record<string, unknown>): 'ask' | 'bypassPermissions' {
@@ -1785,7 +1790,7 @@ export function registerBotIpc(): void {
           model:
             typeof config.model === 'string' && config.model.trim()
               ? config.model.trim()
-              : 'claude-sonnet-4-6',
+              : defaultBotModelForConfig(config),
           providerId:
             typeof config.providerId === 'string' && config.providerId.trim()
               ? config.providerId.trim()
