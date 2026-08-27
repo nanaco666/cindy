@@ -10,7 +10,7 @@ export type BotProfileLifecycleStatus =
   | 'archived'
   | 'deleting';
 
-export type BotLifecycleAction = 'pause' | 'resume' | 'archive' | 'restore' | 'delete';
+export type BotLifecycleAction = 'pause' | 'resume' | 'delete';
 
 export type BotWorktreeDisposition = 'recycle' | 'retain';
 
@@ -19,7 +19,7 @@ export interface BotLifecycleActionRequest {
   action: BotLifecycleAction;
   /** Required for permanent deletion; compared in main against the current name. */
   confirmName?: string;
-  /** Archive/delete only. Recycle is safe and preserves the git branch. */
+  /** Delete only. Recycle is safe and preserves the git branch. */
   worktreeDisposition?: BotWorktreeDisposition;
   /** Delete only. Retained task transcripts become archived standalone tasks. */
   keepTaskHistory?: boolean;
@@ -29,7 +29,6 @@ export interface BotLifecycleActionResult {
   botId: string;
   action: BotLifecycleAction;
   status: BotProfileLifecycleStatus | 'deleted';
-  canonicalSessionId?: string;
   affected: {
     sessions: number;
     routes: number;

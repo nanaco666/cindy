@@ -6772,7 +6772,7 @@
       "empty": "No matching teammate history was found."
     },
     "lifecycle": {
-      "archivedBots": "Archived teammates",
+      "stoppedBots": "Teammates needing attention",
       "title": "Health and history",
       "description": "Inspect the canonical task, routes, automation, workspaces, archived transcripts, and lifecycle events.",
       "refresh": "Refresh teammate health",
@@ -6780,15 +6780,11 @@
       "activeDescription": "Channel routes, automation, deliveries, and teammate-to-teammate work can run.",
       "pausedTitle": "Teammate is paused",
       "pausedDescription": "New work is blocked. User-paused automations remain paused after the teammate resumes.",
-      "archivedTitle": "Teammate is archived",
-      "archivedDescription": "Historical tasks stay read-only. Restore creates a new canonical task instead of reviving history.",
+      "stoppedTitle": "Teammate has stopped",
+      "stoppedDescription": "This is a legacy stopped state. You can still keep its task transcripts when permanently deleting it.",
       "pause": "Pause teammate",
       "resume": "Resume teammate",
-      "archive": "Archive teammate",
-      "restore": "Restore teammate",
       "delete": "Delete permanently",
-      "archiveTitle": "Archive this teammate?",
-      "archiveDescription": "The teammate stops accepting work and its canonical and route tasks move into history.",
       "deleteTitle": "Permanently delete teammate",
       "deleteDescription": "This deletes {{name}} — the personality, the connected channels and the scheduled runs. It cannot be undone.",
       "keepHistory": "Keep task transcripts as ordinary archived tasks.",
@@ -6937,7 +6933,7 @@
           }
         }
       },
-      "archivedNote": "An archived teammate never picks up task activity. Restore them first to turn this back on."
+      "stoppedNote": "A teammate that is not running does not pick up task activity."
     },
     "adapterBoundaryTitle": "Adapter boundary preserved",
     "adapterBoundaryDescription": "Telegram replies, Feishu cards, Slack threads and local delivery remain owned by their adapters. This screen only provides teammate identity and task projection.",

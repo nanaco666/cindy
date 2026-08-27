@@ -139,7 +139,6 @@ describe('Bot lifecycle coordinator', () => {
   let cancelForBot: ReturnType<typeof vi.fn>;
   let retainWorktrees: ReturnType<typeof vi.fn>;
   let releaseWorktrees: ReturnType<typeof vi.fn>;
-  let createCanonicalSession: ReturnType<typeof vi.fn>;
   let deleteProfileAndDetachSessions: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -156,16 +155,6 @@ describe('Bot lifecycle coordinator', () => {
     cancelForBot = vi.fn(async () => 4);
     retainWorktrees = vi.fn(async () => 2);
     releaseWorktrees = vi.fn(async () => 2);
-    createCanonicalSession = vi.fn(async () => {
-      sqlite.prepare("INSERT INTO sessions VALUES ('restored-canonical', 'bot', 'active', 10)").run();
-      sqlite.prepare(
-        "INSERT INTO bot_session_links VALUES ('link-restored', 'bot-1', 'restored-canonical', 1, 'canonical', NULL, NULL, 10, NULL)",
-      ).run();
-      sqlite.prepare(
-        "UPDATE bot_profiles SET canonical_session_id = 'restored-canonical', updated_at = 10 WHERE id = 'bot-1'",
-      ).run();
-      return { canonicalSessionId: 'restored-canonical' };
-    });
     deleteProfileAndDetachSessions = vi.fn(async (
       botId: string,
       sessionIds: string[],
@@ -189,7 +178,6 @@ describe('Bot lifecycle coordinator', () => {
       resumeSchedule,
       retainWorktrees,
       releaseWorktrees,
-      createCanonicalSession,
       deleteProfileAndDetachSessions,
       now: () => 10,
     });
@@ -302,13 +290,15 @@ describe('Bot lifecycle coordinator', () => {
     expect(resumeForBot).not.toHaveBeenCalled();
   });
 
-  it('fails closed before closing tasks or archiving when an active Automation cannot stop', async () => {
+  it('fails closed before deleting when an active Automation cannot stop', async () => {
     pauseSchedule.mockRejectedValueOnce(new Error('scheduler did not acknowledge abort'));
     const lifecycle = service();
 
-    await expect(lifecycle.run({ botId: 'bot-1', action: 'archive' })).rejects.toThrow(
-      '无法安全停止',
-    );
+    await expect(lifecycle.run({
+      botId: 'bot-1',
+      action: 'delete',
+      confirmName: 'Helper',
+    })).rejects.toThrow('无法安全停止');
 
     expect(row(sqlite, 'bot_profiles', 'bot-1').status).toBe('paused');
     expect(row(sqlite, 'bot_automation_links', 'auto-active')).toMatchObject({
@@ -321,10 +311,15 @@ describe('Bot lifecycle coordinator', () => {
     expect(cancelForBot).not.toHaveBeenCalled();
     expect(retainWorktrees).not.toHaveBeenCalled();
     expect(releaseWorktrees).not.toHaveBeenCalled();
+    expect(deleteProfileAndDetachSessions).not.toHaveBeenCalled();
 
     pauseSchedule.mockResolvedValueOnce(undefined);
-    await expect(lifecycle.run({ botId: 'bot-1', action: 'archive' })).resolves.toMatchObject({
-      status: 'archived',
+    await expect(lifecycle.run({
+      botId: 'bot-1',
+      action: 'delete',
+      confirmName: 'Helper',
+    })).resolves.toMatchObject({
+      status: 'deleted',
     });
   });
 
@@ -356,15 +351,15 @@ describe('Bot lifecycle coordinator', () => {
     expect(row(sqlite, 'bot_profiles', 'bot-1').status).toBe('active');
   });
 
-  it('archives every Bot task and retains worktrees by default', async () => {
-    const result = await service().run({ botId: 'bot-1', action: 'archive' });
-
-    expect(row(sqlite, 'bot_profiles', 'bot-1')).toMatchObject({
-      status: 'archived',
-      canonical_session_id: null,
+  it('keeps the archive transaction private as deletion shutdown machinery', async () => {
+    const result = await service().run({
+      botId: 'bot-1',
+      action: 'delete',
+      confirmName: 'Helper',
+      keepTaskHistory: true,
     });
-    expect(row(sqlite, 'sessions', 'canonical').status).toBe('archived');
-    expect(row(sqlite, 'sessions', 'route-session').status).toBe('archived');
+
+    expect(sqlite.prepare("SELECT id FROM bot_profiles WHERE id = 'bot-1'").get()).toBeUndefined();
     expect(row(sqlite, 'bot_session_links', 'link-canonical').role).toBe('history');
     expect(row(sqlite, 'bot_routes', 'route-active')).toMatchObject({
       status: 'paused',
@@ -374,58 +369,29 @@ describe('Bot lifecycle coordinator', () => {
       status: 'paused',
       suspended_status: 'active',
     });
-    expect(cancelForBot).toHaveBeenCalledWith('bot-1', 'Bot archived');
+    expect(cancelForBot).toHaveBeenCalledWith('bot-1', 'Bot prepared for deletion');
+    expect(cancelForBot).toHaveBeenCalledWith('bot-1', 'Bot permanently deleted');
     expect(retainWorktrees).toHaveBeenCalledWith('bot-1');
     expect(releaseWorktrees).not.toHaveBeenCalled();
     expect(result).toMatchObject({
-      status: 'archived',
-      affected: { sessions: 2, routes: 2, automations: 2, deliveries: 4, worktrees: 2 },
+      action: 'delete',
+      status: 'deleted',
+      affected: { sessions: 2 },
     });
   });
 
-  it('keeps the Bot archived when worktree recycling is safely refused', async () => {
+  it('reports worktree recycling refusal while still completing deletion', async () => {
     releaseWorktrees.mockRejectedValueOnce(new Error('worktree is dirty'));
     const result = await service().run({
       botId: 'bot-1',
-      action: 'archive',
+      action: 'delete',
+      confirmName: 'Helper',
       worktreeDisposition: 'recycle',
     });
 
-    expect(row(sqlite, 'bot_profiles', 'bot-1').status).toBe('archived');
+    expect(sqlite.prepare("SELECT id FROM bot_profiles WHERE id = 'bot-1'").get()).toBeUndefined();
     expect(result.warnings?.[0]).toContain('WORKTREE_DISPOSITION_FAILED');
     expect(retainWorktrees).not.toHaveBeenCalled();
-  });
-
-  it('restores into a fresh canonical task without reviving archived history', async () => {
-    const lifecycle = service();
-    await lifecycle.run({ botId: 'bot-1', action: 'archive' });
-    const result = await lifecycle.run({ botId: 'bot-1', action: 'restore' });
-
-    expect(createCanonicalSession).toHaveBeenCalledWith({
-      botId: 'bot-1',
-      expectedCanonicalSessionId: null,
-      expectedProfileVersion: 1,
-    });
-    expect(row(sqlite, 'bot_profiles', 'bot-1')).toMatchObject({
-      status: 'active',
-      canonical_session_id: 'restored-canonical',
-    });
-    expect(row(sqlite, 'sessions', 'canonical').status).toBe('archived');
-    expect(row(sqlite, 'sessions', 'route-session').status).toBe('archived');
-    expect(row(sqlite, 'sessions', 'restored-canonical').status).toBe('active');
-    expect(row(sqlite, 'bot_routes', 'route-active')).toMatchObject({
-      status: 'active',
-      suspended_status: null,
-    });
-    expect(row(sqlite, 'bot_routes', 'route-user-paused')).toMatchObject({
-      status: 'paused',
-      suspended_status: null,
-    });
-    expect(result).toMatchObject({
-      action: 'restore',
-      status: 'active',
-      canonicalSessionId: 'restored-canonical',
-    });
   });
 
   it('requires an exact Bot name before permanent deletion', async () => {

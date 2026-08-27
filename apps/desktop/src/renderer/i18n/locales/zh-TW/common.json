@@ -6762,7 +6762,7 @@
       "empty": "找不到符合的夥伴歷史。"
     },
     "lifecycle": {
-      "archivedBots": "已封存夥伴",
+      "stoppedBots": "需要處理的夥伴",
       "title": "健康與歷史",
       "description": "檢查主任務、Route、自動化、工作區、封存記錄與生命週期事件。",
       "refresh": "重新整理夥伴健康狀態",
@@ -6770,15 +6770,11 @@
       "activeDescription": "通道 Route、自動化、投遞與夥伴間協作可以正常執行。",
       "pausedTitle": "夥伴已暫停",
       "pausedDescription": "不會接收新工作；使用者原本手動暫停的自動化在恢復夥伴後仍保持暫停。",
-      "archivedTitle": "夥伴已封存",
-      "archivedDescription": "歷史任務保持唯讀；恢復時會建立新的主任務，不會復活舊任務。",
+      "stoppedTitle": "夥伴已停止運行",
+      "stoppedDescription": "這是舊版留下的停止狀態；你仍可保留任務記錄後永久刪除夥伴。",
       "pause": "暫停夥伴",
       "resume": "恢復夥伴",
-      "archive": "封存夥伴",
-      "restore": "恢復夥伴",
       "delete": "永久刪除",
-      "archiveTitle": "封存這個夥伴？",
-      "archiveDescription": "夥伴會停止接收工作，目前主任務與 Route 任務會進入歷史。",
       "deleteTitle": "永久刪除夥伴",
       "deleteDescription": "這會刪掉 {{name}}：個性、已連的通道、排定的行程都會消失。刪了找不回來。",
       "keepHistory": "保留任務記錄，將它們轉為一般的已封存任務。",
@@ -6927,7 +6923,7 @@
           }
         }
       },
-      "archivedNote": "已歸檔的夥伴不接手任何任務動靜。先恢復{{pronoun}}，這裡才能重新開啟。"
+      "stoppedNote": "夥伴未運行時不會接手任務動靜。"
     },
     "adapterBoundaryTitle": "保留訊息層邊界",
     "adapterBoundaryDescription": "Telegram 引用、飛書卡片、Slack thread 與本地投遞仍由各自 adapter 負責。本頁只負責夥伴身分與任務投影。",

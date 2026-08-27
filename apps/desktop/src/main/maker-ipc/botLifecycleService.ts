@@ -16,7 +16,6 @@ import {
   botProfiles,
   botRoutes,
   botSessionLinks,
-  sessions,
 } from '../localDb/schema.js';
 import { removeBotProfileFolder } from './botProfileFolder.js';
 import { createLogger } from '../logger.js';
@@ -45,11 +44,6 @@ export interface BotLifecycleServiceDeps {
   resumeSchedule?: (scheduleId: string) => Promise<void>;
   retainWorktrees?: (botId: string) => Promise<number>;
   releaseWorktrees?: (botId: string) => Promise<number>;
-  createCanonicalSession?: (input: {
-    botId: string;
-    expectedCanonicalSessionId: string | null;
-    expectedProfileVersion: number;
-  }) => Promise<{ canonicalSessionId: string }>;
   deleteProfileAndDetachSessions?: (
     botId: string,
     sessionIds: string[],
@@ -131,10 +125,6 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
   });
   const retainWorktrees = deps.retainWorktrees ?? retainBotWorkspaceLeases;
   const releaseWorktrees = deps.releaseWorktrees ?? releaseAllBotWorkspaceLeases;
-  const createCanonicalSession = deps.createCanonicalSession ?? (async (input) => {
-    const { createBotCanonicalSession } = await import('../localDb/ipc/bots.js');
-    return createBotCanonicalSession(input);
-  });
   const deleteProfileAndDetachSessions =
     deps.deleteProfileAndDetachSessions ?? deleteBotProfileAndDetachSessionsInDb;
   const notifyLifecycleChanged = async (
@@ -229,7 +219,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
       });
       throwIpcError(
         'PRECONDITION_FAILED',
-        '部分 Bot Automation 无法安全停止，Bot 已保持暂停；请重试后再归档或删除',
+        '部分 Bot Automation 无法安全停止，Bot 已保持暂停；请重试后再删除',
       );
     }
     const delegationService = deps.getDelegationService();
@@ -340,15 +330,20 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
     return result;
   };
 
-  const archive = async (
-    request: BotLifecycleActionRequest,
-  ): Promise<BotLifecycleActionResult> => {
+  /**
+   * Permanent deletion still needs the existing fail-closed shutdown transaction.
+   * This is deliberately private: v1 does not expose Bot archive/restore as a product lifecycle.
+   */
+  const prepareForDeletion = async (request: {
+    botId: string;
+    worktreeDisposition?: BotLifecycleActionRequest['worktreeDisposition'];
+  }): Promise<{ warnings: string[] }> => {
     let profile = await readProfile(request.botId);
     if (profile.status === 'deleting') {
       throwIpcError('PRECONDITION_FAILED', 'Bot 正在永久删除');
     }
     if (profile.status === 'archived') {
-      return lifecycleResult(request.botId, 'archive', 'archived', {});
+      return { warnings: [] };
     }
 
     if (profile.status !== 'paused') {
@@ -356,22 +351,9 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
       profile = await readProfile(request.botId);
     }
 
-    const db = getDbClient().drizzle;
     const canonicalSessionId = await readCanonicalSessionId(request.botId);
-    const [links, routes, automations] = await Promise.all([
-      db
-        .select({ sessionId: botSessionLinks.sessionId })
-        .from(botSessionLinks)
-        .where(eq(botSessionLinks.botId, request.botId)),
-      db.select({ id: botRoutes.id }).from(botRoutes).where(eq(botRoutes.botId, request.botId)),
-      db
-        .select({ id: botAutomationLinks.id })
-        .from(botAutomationLinks)
-        .where(eq(botAutomationLinks.botId, request.botId)),
-    ]);
-    const sessionIds = [...new Set(links.map((row) => row.sessionId))];
     const at = now();
-    const archived = await getDbClient().tx<{ sessions: number }>('bots.archiveLifecycle', {
+    await getDbClient().tx<{ sessions: number }>('bots.archiveLifecycle', {
       botId: request.botId,
       canonicalSessionId,
       expectedProfileStatus: profile.status,
@@ -381,123 +363,41 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
     });
 
     const warnings: string[] = [];
-    let deliveries = 0;
     try {
-      deliveries = await (
-        deps.getOutboxService()?.cancelForBot(request.botId, 'Bot archived')
+      await (
+        deps.getOutboxService()?.cancelForBot(request.botId, 'Bot prepared for deletion')
         ?? Promise.resolve(0)
       );
     } catch (error) {
       warnings.push(`OUTBOX_CANCEL_FAILED:${String(error)}`);
     }
-    let worktrees = 0;
     try {
-      worktrees = request.worktreeDisposition === 'recycle'
-        ? await releaseWorktrees(request.botId)
-        : await retainWorktrees(request.botId);
+      await (request.worktreeDisposition === 'recycle'
+        ? releaseWorktrees(request.botId)
+        : retainWorktrees(request.botId));
     } catch (error) {
       warnings.push(`WORKTREE_DISPOSITION_FAILED:${String(error)}`);
     }
-    const result = lifecycleResult(request.botId, 'archive', 'archived', {
-      sessions: archived.sessions,
-      routes: routes.length,
-      automations: automations.length,
-      deliveries,
-      worktrees,
-    }, warnings);
-    await notifyLifecycleChanged(request.botId, 'archive');
-    return result;
-  };
-
-  const restore = async (botId: string): Promise<BotLifecycleActionResult> => {
-    const profile = await readProfile(botId);
-    if (profile.status !== 'archived') {
-      throwIpcError('PRECONDITION_FAILED', `Bot 当前状态为 ${profile.status}`);
-    }
-    const canonical = await resolveBotCanonicalSession(botId);
-    if (canonical.status !== 'missing') {
-      throwIpcError('PRECONDITION_FAILED', '已归档 Bot 不应保留主任务指针');
-    }
-    const db = getDbClient().drizzle;
-    const at = now();
-    const [claimed] = await db
-      .update(botProfiles)
-      // The compatibility mirror is not authority. Clear any stale value while
-      // claiming restore so the canonical creator cannot revive it as legacy
-      // ownership after the registry has already said "missing".
-      .set({ status: 'paused', canonicalSessionId: null, updatedAt: at })
-      .where(and(eq(botProfiles.id, botId), eq(botProfiles.status, 'archived')))
-      .returning({ id: botProfiles.id });
-    if (!claimed) throwIpcError('PRECONDITION_FAILED', 'Bot 生命周期已被另一处操作更新');
-
-    let canonicalSessionId: string;
-    try {
-      const created = await createCanonicalSession({
-        botId,
-        expectedCanonicalSessionId: null,
-        expectedProfileVersion: profile.currentVersion,
-      });
-      canonicalSessionId = created.canonicalSessionId;
-    } catch (error) {
-      await db
-        .update(botProfiles)
-        .set({ status: 'archived', canonicalSessionId: null, updatedAt: now() })
-        .where(and(eq(botProfiles.id, botId), eq(botProfiles.status, 'paused')));
-      throw error;
-    }
-
-    try {
-      const resumed = await resume(botId);
-      const completedAt = now();
-      await db.insert(botLifecycleEvents).values({
-        id: randomUUID(),
-        botId,
-        sessionId: canonicalSessionId,
-        eventType: 'restored',
-        payloadJson: JSON.stringify({ profileVersion: profile.currentVersion }),
-        createdAt: completedAt,
-      });
-      const result = {
-        ...resumed,
-        action: 'restore' as const,
-        canonicalSessionId,
-        affected: { ...resumed.affected, sessions: 1 },
-      };
-      await notifyLifecycleChanged(botId, 'restore');
-      return result;
-    } catch (error) {
-      // Resume is fail-closed and leaves the Bot paused. Keep the fresh
-      // canonical task so the user can diagnose and retry Resume without
-      // creating another task or reviving archived history.
-      await db.insert(botLifecycleEvents).values({
-        id: randomUUID(),
-        botId,
-        sessionId: canonicalSessionId,
-        eventType: 'restore-paused',
-        payloadJson: JSON.stringify({ error: String(error) }),
-        createdAt: now(),
-      });
-      throw error;
-    }
+    return { warnings };
   };
 
   const remove = async (
     request: BotLifecycleActionRequest,
   ): Promise<BotLifecycleActionResult> => {
-    let profile = await readProfile(request.botId);
+    const profile = await readProfile(request.botId);
     if (request.confirmName !== profile.displayName) {
       throwIpcError('INVALID_PARAMS', '请输入完整 Bot 名称以确认永久删除');
     }
     if (profile.status === 'deleting') {
       throwIpcError('PRECONDITION_FAILED', 'Bot 已在永久删除流程中');
     }
+    let preparationWarnings: string[] = [];
     if (profile.status !== 'archived') {
-      await archive({
-        ...request,
-        action: 'archive',
+      const prepared = await prepareForDeletion({
+        botId: request.botId,
         worktreeDisposition: request.worktreeDisposition ?? 'retain',
       });
-      profile = await readProfile(request.botId);
+      preparationWarnings = prepared.warnings;
     } else if (request.worktreeDisposition === 'recycle') {
       await releaseWorktrees(request.botId);
     } else {
@@ -547,7 +447,7 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
       sessions: sessionIds.length,
       delegations,
       deliveries,
-    }, closed.warnings);
+    }, [...preparationWarnings, ...closed.warnings]);
     await notifyLifecycleChanged(request.botId, 'delete');
     return result;
   };
@@ -556,8 +456,6 @@ export function createBotLifecycleService(deps: BotLifecycleServiceDeps) {
     withBotLifecycleLock(request.botId, request.action, async () => {
       if (request.action === 'pause') return pause(request.botId);
       if (request.action === 'resume') return resume(request.botId);
-      if (request.action === 'archive') return archive(request);
-      if (request.action === 'restore') return restore(request.botId);
       if (request.action === 'delete') return remove(request);
       throwIpcError('PRECONDITION_FAILED', `${request.action} 尚未接入 Bot 生命周期协调器`);
     });
@@ -572,7 +470,7 @@ export function registerBotLifecycleHandlers(deps: BotLifecycleServiceDeps): voi
     const body = requireObject(raw, 'request');
     const botId = requireString(body.botId, 'botId');
     const action = requireString(body.action, 'action');
-    if (!['pause', 'resume', 'archive', 'restore', 'delete'].includes(action)) {
+    if (!['pause', 'resume', 'delete'].includes(action)) {
       throwIpcError('INVALID_PARAMS', '未知 Bot 生命周期操作');
     }
     return service.run({

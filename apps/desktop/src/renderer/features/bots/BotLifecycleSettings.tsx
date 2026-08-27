@@ -3,7 +3,6 @@ import * as Dialog from '@radix-ui/react-dialog';
 import {
   Activity,
   AlertTriangle,
-  Archive,
   CheckCircle2,
   Clock3,
   PauseCircle,
@@ -63,11 +62,8 @@ export function BotLifecycleSettings({
   const [searchError, setSearchError] = useState(false);
   const [searchResult, setSearchResult] = useState<ConversationSearchResponse | null>(null);
   const [renewingNow, setRenewingNow] = useState(false);
-  const [actionBusy, setActionBusy] = useState<
-    'pause' | 'resume' | 'archive' | 'restore' | 'delete' | null
-  >(null);
+  const [actionBusy, setActionBusy] = useState<'pause' | 'resume' | 'delete' | null>(null);
   const [actionError, setActionError] = useState(false);
-  const [archiveOpen, setArchiveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [worktreeDisposition, setWorktreeDisposition] = useState<'retain' | 'recycle'>('retain');
   const [keepTaskHistory, setKeepTaskHistory] = useState(true);
@@ -134,37 +130,6 @@ export function BotLifecycleSettings({
     setActionError(false);
     try {
       await runBotLifecycleAction({ botId: bot.id, action });
-      await load();
-    } catch {
-      setActionError(true);
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  const archiveBot = async () => {
-    setActionBusy('archive');
-    setActionError(false);
-    try {
-      await runBotLifecycleAction({
-        botId: bot.id,
-        action: 'archive',
-        worktreeDisposition,
-      });
-      setArchiveOpen(false);
-      await load();
-    } catch {
-      setActionError(true);
-    } finally {
-      setActionBusy(null);
-    }
-  };
-
-  const restoreBot = async () => {
-    setActionBusy('restore');
-    setActionError(false);
-    try {
-      await runBotLifecycleAction({ botId: bot.id, action: 'restore' });
       await load();
     } catch {
       setActionError(true);
@@ -290,66 +255,39 @@ export function BotLifecycleSettings({
         <div>
           <p className="text-12 font-medium text-[var(--text-primary)]">
             {isArchived
-              ? t('bots.lifecycle.archivedTitle')
+              ? t('bots.lifecycle.stoppedTitle')
               : isPaused
                 ? t('bots.lifecycle.pausedTitle')
                 : t('bots.lifecycle.activeTitle')}
           </p>
           <p className="mt-1 text-11 leading-5 text-[var(--text-tertiary)]">
             {isArchived
-              ? t('bots.lifecycle.archivedDescription')
+              ? t('bots.lifecycle.stoppedDescription')
               : isPaused
               ? t('bots.lifecycle.pausedDescription')
               : t('bots.lifecycle.activeDescription')}
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          {isArchived ? (
+          {!isArchived ? (
             <button
               type="button"
-              onClick={() => void restoreBot()}
+              onClick={() => void runLifecycleAction(isPaused ? 'resume' : 'pause')}
               disabled={actionBusy !== null}
-              className="inline-flex h-9 items-center gap-2 rounded-full bg-[var(--accent-cta-bg)] px-4 text-12 font-medium text-[var(--accent-pure-cta-fg)] disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-default)] px-4 text-12 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
             >
-              <RotateCcw size={15} />
-              {actionBusy === 'restore' ? t('bots.lifecycle.working') : t('bots.lifecycle.restore')}
+              {isPaused ? <PlayCircle size={15} /> : <PauseCircle size={15} />}
+              {actionBusy
+                ? t('bots.lifecycle.working')
+                : isPaused
+                  ? t('bots.lifecycle.resume')
+                  : t('bots.lifecycle.pause')}
             </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => void runLifecycleAction(isPaused ? 'resume' : 'pause')}
-                disabled={actionBusy !== null}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-default)] px-4 text-12 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
-              >
-                {isPaused ? <PlayCircle size={15} /> : <PauseCircle size={15} />}
-                {actionBusy
-                  ? t('bots.lifecycle.working')
-                  : isPaused
-                    ? t('bots.lifecycle.resume')
-                    : t('bots.lifecycle.pause')}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  // 归档与删除共用同一个 worktreeDisposition state。不在开场时归零的话,
-                  // 「归档→选了回收→取消→改点删除」会让那个不可逆的对话框**预选**回收
-                  // 工作区——用户从没在删除这一屏上选过它。每次开场都回到 retain 默认。
-                  setWorktreeDisposition('retain');
-                  setArchiveOpen(true);
-                }}
-                disabled={actionBusy !== null}
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-default)] px-4 text-12 font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
-              >
-                <Archive size={15} /> {t('bots.lifecycle.archive')}
-              </button>
-            </>
-          )}
+          ) : null}
           <button
             type="button"
             onClick={() => {
               setConfirmName('');
-              // 见上:删除对话框不继承归档那一轮选过的工作区处置。
               setWorktreeDisposition('retain');
               setKeepTaskHistory(true);
               setDeleteOpen(true);
@@ -620,33 +558,6 @@ export function BotLifecycleSettings({
           )}
         </div>
       </div>
-
-      <Dialog.Root open={archiveOpen} onOpenChange={setArchiveOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-[var(--overlay-modal)]" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(460px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5 outline-none">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <Dialog.Title className="text-16 font-medium text-[var(--text-primary)]">{t('bots.lifecycle.archiveTitle')}</Dialog.Title>
-                <Dialog.Description className="mt-1 text-12 leading-5 text-[var(--text-secondary)]">{t('bots.lifecycle.archiveDescription')}</Dialog.Description>
-              </div>
-              <Dialog.Close className="rounded-lg p-1 text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)]"><X size={16} /></Dialog.Close>
-            </div>
-            <div className="mt-4 flex flex-col gap-2">
-              {(['retain', 'recycle'] as const).map((value) => (
-                <label key={value} className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--border-default)] p-3 hover:bg-[var(--surface-hover)]">
-                  <input type="radio" name="archive-worktree" checked={worktreeDisposition === value} onChange={() => setWorktreeDisposition(value)} className="mt-1" />
-                  <span><span className="block text-12 font-medium text-[var(--text-primary)]">{t(`bots.lifecycle.worktree.${value}`)}</span><span className="mt-1 block text-11 leading-5 text-[var(--text-tertiary)]">{t(`bots.lifecycle.worktree.${value}Description`)}</span></span>
-                </label>
-              ))}
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <Dialog.Close className="h-9 rounded-lg px-3 text-12 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]">{t('bots.cancel')}</Dialog.Close>
-              <button type="button" onClick={() => void archiveBot()} disabled={actionBusy !== null} className="h-9 rounded-lg bg-[var(--accent-cta-bg)] px-4 text-12 font-medium text-[var(--accent-pure-cta-fg)] disabled:opacity-50">{actionBusy === 'archive' ? t('bots.lifecycle.working') : t('bots.lifecycle.archive')}</button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
 
       <Dialog.Root open={deleteOpen} onOpenChange={setDeleteOpen}>
         <Dialog.Portal>

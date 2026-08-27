@@ -119,12 +119,7 @@ export function BotEventInboxSettings({ bot }: { bot: BotProfile }) {
             {t('bots.inbox.description')}
           </p>
         </div>
-        {/*
-          归档伙伴身上这个开关**永远**点不动(status !== 'active' 恒禁用),而归档伙伴
-          的设置页本来就只剩这一屏 —— 于是整节围着一颗死开关转。摆一个用户无论如何
-          都翻不动的开关不如说清楚为什么:归档态如实给一句状态陈述 + 指出恢复路径,
-          下面的事件时间线仍然照常可读(那是真数据,不受影响)。
-        */}
+        {/* 非 active 状态不允许改订阅，但历史事件仍可读。 */}
         {bot.status === 'active' ? (
           <label className="flex shrink-0 items-center gap-2 text-12 text-[var(--text-secondary)]">
             <Switch
@@ -137,7 +132,7 @@ export function BotEventInboxSettings({ bot }: { bot: BotProfile }) {
           </label>
         ) : (
           <p className="max-w-xs shrink-0 text-11 leading-5 text-[var(--text-tertiary)]">
-            {t('bots.inbox.archivedNote')}
+            {t('bots.inbox.stoppedNote')}
           </p>
         )}
       </div>

@@ -357,6 +357,19 @@ describe('BotsSidebar rows', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/bots/bot-1');
   });
 
+  it('keeps legacy stopped Bots reachable for deletion without presenting archive or restore', async () => {
+    mocks.profiles = [
+      { ...bot({ id: 'legacy-stopped', name: 'Legacy stopped' }), status: 'archived' },
+    ];
+
+    await renderSidebar();
+
+    expect(screen.getByText('bots.lifecycle.stoppedBots')).toBeTruthy();
+    expect(screen.queryByText('bots.lifecycle.archivedBots')).toBeNull();
+    fireEvent.click(screen.getByText('Legacy stopped'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/bots/legacy-stopped?settings=1');
+  });
+
   it('shows an unread count only for Bots with unread replies, capped at 99+', async () => {
     mocks.profiles = [
       bot({ id: 'bot-read', name: 'Read', lastMessagePreview: 'Nothing new' }),

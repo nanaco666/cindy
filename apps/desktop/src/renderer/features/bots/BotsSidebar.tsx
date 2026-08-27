@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  Archive,
   Bot,
   Copy,
   Eye,
@@ -547,8 +546,8 @@ function BotsSidebarContent() {
             {archivedBots.length > 0 ? (
               <div className="mt-3 border-t border-[var(--border-default)] pt-3">
                 <div className="mb-1 flex items-center gap-2 px-2.5 text-10 font-medium text-[var(--sidebar-list-muted)]">
-                  <Archive size={12} />
-                  <span>{t('bots.lifecycle.archivedBots')}</span>
+                  <AlertTriangle size={12} />
+                  <span>{t('bots.lifecycle.stoppedBots')}</span>
                 </div>
                 {archivedBots.map((bot) => {
                   const selected = bot.id === botId;

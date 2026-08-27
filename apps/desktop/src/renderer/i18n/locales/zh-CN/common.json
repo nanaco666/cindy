@@ -6762,7 +6762,7 @@
       "empty": "没有找到匹配的伙伴历史。"
     },
     "lifecycle": {
-      "archivedBots": "已归档伙伴",
+      "stoppedBots": "需要处理的伙伴",
       "title": "健康与历史",
       "description": "检查主任务、Route、自动化、工作区、归档记录和生命周期事件。",
       "refresh": "刷新伙伴健康状态",
@@ -6770,15 +6770,11 @@
       "activeDescription": "通道 Route、自动化、投递和伙伴间协作可以正常执行。",
       "pausedTitle": "伙伴已暂停",
       "pausedDescription": "不会接收新工作；用户原本手动暂停的自动化在恢复伙伴后仍保持暂停。",
-      "archivedTitle": "伙伴已归档",
-      "archivedDescription": "历史任务保持只读；恢复时会创建新的主任务，不会复活旧任务。",
+      "stoppedTitle": "伙伴已停止运行",
+      "stoppedDescription": "这是旧版留下的停止状态；你仍可保留任务记录后永久删除伙伴。",
       "pause": "暂停伙伴",
       "resume": "恢复伙伴",
-      "archive": "归档伙伴",
-      "restore": "恢复伙伴",
       "delete": "永久删除",
-      "archiveTitle": "归档这个伙伴？",
-      "archiveDescription": "伙伴会停止接收工作，当前主任务与 Route 任务会进入历史。",
       "deleteTitle": "永久删除伙伴",
       "deleteDescription": "这会删掉 {{name}}：性格、已连的通道、定的日程都会没。删了找不回来。",
       "keepHistory": "保留任务记录，将它们转为普通的已归档任务。",
@@ -6927,7 +6923,7 @@
           }
         }
       },
-      "archivedNote": "已归档的伙伴不接手任何任务动静。先恢复{{pronoun}}，这里才能重新打开。"
+      "stoppedNote": "伙伴未运行时不会接手任务动静。"
     },
     "adapterBoundaryTitle": "保留消息层边界",
     "adapterBoundaryDescription": "Telegram 引用、飞书卡片、Slack thread 和本地投递仍由各自 adapter 负责。本页面只负责伙伴身份和任务投影。",

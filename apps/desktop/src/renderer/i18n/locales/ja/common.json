@@ -6770,7 +6770,7 @@
       "empty": "一致する仲間履歴はありません。"
     },
     "lifecycle": {
-      "archivedBots": "アーカイブ済み仲間",
+      "stoppedBots": "対応が必要な仲間",
       "title": "ヘルスと履歴",
       "description": "メインタスク、Route、自動化、worktree、アーカイブ記録、ライフサイクルイベントを確認します。",
       "refresh": "仲間ヘルスを更新",
@@ -6778,15 +6778,11 @@
       "activeDescription": "チャネル Route、自動化、配信、仲間同士の連携を実行できます。",
       "pausedTitle": "仲間は一時停止中です",
       "pausedDescription": "新しい作業を受け付けません。ユーザーが停止した自動化は再開後も停止したままです。",
-      "archivedTitle": "仲間はアーカイブ済みです",
-      "archivedDescription": "履歴タスクは読み取り専用です。復元時は古いタスクを再開せず、新しいメインタスクを作成します。",
+      "stoppedTitle": "仲間は停止しています",
+      "stoppedDescription": "これは旧バージョンの停止状態です。完全に削除する際もタスク履歴は保持できます。",
       "pause": "仲間を一時停止",
       "resume": "仲間を再開",
-      "archive": "仲間をアーカイブ",
-      "restore": "仲間を復元",
       "delete": "完全に削除",
-      "archiveTitle": "この仲間をアーカイブしますか？",
-      "archiveDescription": "仲間は作業の受付を停止し、メインタスクと Route タスクは履歴に移動します。",
       "deleteTitle": "仲間を完全に削除",
       "deleteDescription": "{{name}} を削除します。性格・つないだチャネル・予定した実行がすべてなくなり、元に戻せません。",
       "keepHistory": "タスク履歴を通常のアーカイブ済みタスクとして残す。",
@@ -6935,7 +6931,7 @@
           }
         }
       },
-      "archivedNote": "アーカイブ済みの仲間はタスクの動きを引き受けません。ここを再び有効にするには、まず復元してください。"
+      "stoppedNote": "仲間が動作していない間はタスクの動きを引き受けません。"
     },
     "adapterBoundaryTitle": "アダプター境界を維持",
     "adapterBoundaryDescription": "Telegram の返信、Feishu カード、Slack スレッド、ローカル配信は各アダプターが担当します。この画面は仲間の ID とタスク投影のみを扱います。",

@@ -3,10 +3,8 @@
 /**
  * 「自动关注其它任务」这一节。
  *
- * 空头支票复核 2026-08-19:那颗开关的 disabled 条件里含 `bot.status !== 'active'`,
- * 而**归档伙伴的设置页基本只剩这一屏** —— 于是整节围着一颗用户无论如何都翻不动的
- * 开关转,既不解释为什么,也不指出怎么才能翻动它。摆一个点不动的开关不如说清现状:
- * 归档态改为一句状态陈述 + 恢复路径,下面的事件时间线仍然照常可读（真数据）。
+ * 非 active 状态不摆一颗用户无论如何都翻不动的开关，改为陈述当前状态；
+ * 下面的事件时间线仍然照常可读（真数据）。
  */
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -57,11 +55,11 @@ describe('自动关注其它任务', () => {
     expect(toggle.hasAttribute('disabled')).toBe(false);
   });
 
-  it('归档伙伴身上不摆点不动的开关，改说现状与恢复路径', async () => {
+  it('旧版停止状态不摆点不动的开关，也不再提供恢复路径', async () => {
     render(<BotEventInboxSettings bot={profile('archived')} />);
 
     await waitFor(() =>
-      expect(screen.getByText('bots.inbox.archivedNote')).toBeTruthy(),
+      expect(screen.getByText('bots.inbox.stoppedNote')).toBeTruthy(),
     );
     expect(screen.queryByRole('switch')).toBeNull();
     // 这一节的标题与说明仍在——只是不再假装可操作。

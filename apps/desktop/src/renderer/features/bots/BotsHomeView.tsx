@@ -530,7 +530,7 @@ export function BotSettings({
             <BotAvatar bot={bot} size="lg" />
             <div>
               <p className="text-12 font-medium uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
-                {t('bots.lifecycle.archivedTitle')}
+                {t('bots.lifecycle.stoppedTitle')}
               </p>
               <h1 className="mt-1 text-24 font-medium text-[var(--text-primary)]">{bot.name}</h1>
               {bot.description ? (
