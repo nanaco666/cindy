@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   setBotHidden: vi.fn(async () => undefined),
   setBotPinned: vi.fn(async () => undefined),
   duplicateBotProfile: vi.fn(async () => ({ id: 'copy' })),
+  addBotProfileAndWait: vi.fn(async () => ({ id: 'bot-new', name: 'New teammate' })),
   registered: { node: null as ReactNode },
   /** 灵动岛活动镜像:sessionId -> phase。侧栏据此显示「正在输入…」。 */
   islandActivity: new Map<string, { sessionId: string; phase: string }>(),
@@ -49,6 +50,7 @@ vi.mock('../botStore', () => ({
   setBotHidden: mocks.setBotHidden,
   setBotPinned: mocks.setBotPinned,
   duplicateBotProfile: mocks.duplicateBotProfile,
+  addBotProfileAndWait: mocks.addBotProfileAndWait,
   canonicalBotSessionId: (bot: {
     sessions?: Array<{ id: string; role?: string; kind?: string }>;
   }) =>
@@ -110,9 +112,11 @@ beforeEach(() => {
   mocks.setBotHidden.mockReset();
   mocks.setBotPinned.mockReset();
   mocks.duplicateBotProfile.mockReset();
+  mocks.addBotProfileAndWait.mockReset();
   mocks.setBotHidden.mockResolvedValue(undefined);
   mocks.setBotPinned.mockResolvedValue(undefined);
   mocks.duplicateBotProfile.mockResolvedValue({ id: 'copy' });
+  mocks.addBotProfileAndWait.mockResolvedValue({ id: 'bot-new', name: 'New teammate' });
   mocks.health = new Map();
   mocks.unread = {};
   mocks.groups = [];
@@ -390,17 +394,44 @@ describe('BotsSidebar rows', () => {
     );
   });
 
-  it('opens the roster page instead of a modal from every "add" affordance', async () => {
+  it('opens a create menu, with recruitment examples before direct creation', async () => {
     mocks.profiles = [];
 
     await renderSidebar();
 
-    // 空态卡与小节头的「＋」都去主区阵容页;`?add=1` 那层模态已经没有了。
+    // Empty state remains a direct empty-page entry; the section plus now branches
+    // into the two intended creation paths.
     fireEvent.click(screen.getByText('bots.emptyTitle'));
     expect(mocks.navigate).toHaveBeenCalledWith('/bots/roster');
     mocks.navigate.mockClear();
-    fireEvent.click(screen.getByLabelText('bots.add'));
-    expect(mocks.navigate).toHaveBeenCalledWith('/bots/roster');
+    fireEvent.pointerDown(screen.getByLabelText('bots.add'), { button: 0 });
+    expect(screen.getByRole('menuitem', { name: 'bots.createMenu.recruit' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'bots.createMenu.create' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'bots.createMenu.recruit' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/bots/roster/examples');
+  });
+
+  it('opens the shared profile dialog and creates a teammate from the second menu item', async () => {
+    mocks.profiles = [];
+
+    await renderSidebar();
+    fireEvent.pointerDown(screen.getByLabelText('bots.add'), { button: 0 });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'bots.createMenu.create' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'bots.roster.customTitle' });
+    expect(dialog).toBeTruthy();
+    expect(screen.getByLabelText('bots.persona.title')).toBeTruthy();
+    expect(screen.queryByText('bots.persona.stepStyle')).toBeNull();
+    expect(dialog.className).toContain('max-h-[min(640px,calc(100vh-48px))]');
+    fireEvent.change(screen.getByLabelText('bots.nameLabel'), { target: { value: 'Researcher' } });
+    fireEvent.click(screen.getByRole('button', { name: 'bots.roster.create' }));
+
+    await waitFor(() =>
+      expect(mocks.addBotProfileAndWait).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Researcher', channel: 'local' }),
+      ),
+    );
+    expect(mocks.navigate).toHaveBeenCalledWith('/bots/bot-new');
   });
 
   it('has no per-row gear and no section-header import: a row only opens the chat', async () => {
