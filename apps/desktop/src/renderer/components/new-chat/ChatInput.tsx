@@ -542,8 +542,6 @@ interface ChatInputProps {
    * 合理的引擎/模型,用户不动它就永远看不见差别。
    */
   settingsLocked?: boolean;
-  /** Hide the permission control and its keyboard cycling in bot conversations. */
-  hidePermissionSelector?: boolean;
   /** When true, shows Stop button instead of Send button. */
   isStreaming?: boolean;
   /**
@@ -1067,7 +1065,6 @@ export function ChatInput({
   onWorkingDirChange,
   disabled,
   settingsLocked = false,
-  hidePermissionSelector = false,
   isStreaming = false,
   isAgentBusy,
   onStop,
@@ -1806,11 +1803,8 @@ export function ChatInput({
   // 与下拉菜单看到的顺序一致。vendorKey 未锁定时按 PermissionSelector 的
   // 默认取 cc。editorProps.handleKeyDown 是稳定闭包, 走 ref 取值。
   const permissionCycleOptions = useMemo(
-    () =>
-      settingsLocked || hidePermissionSelector
-        ? []
-        : (activeAgentCapabilities?.permissionModes ?? []),
-    [activeAgentCapabilities, hidePermissionSelector, settingsLocked],
+    () => (settingsLocked ? [] : (activeAgentCapabilities?.permissionModes ?? [])),
+    [activeAgentCapabilities, settingsLocked],
   );
   const permissionCycleOptionsRef = useRef(permissionCycleOptions);
   permissionCycleOptionsRef.current = permissionCycleOptions;
@@ -8216,18 +8210,16 @@ export function ChatInput({
                   dense={effectiveDenseToolbar}
                   visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
                 />
-                {!hidePermissionSelector && (
-                  <PermissionSelector
-                    permissionMode={activePermissionMode}
-                    onPermissionModeChange={handlePermissionModeChange}
-                    vendorKey={vendorKey}
-                    deviceId={deviceLinkDeviceId ?? undefined}
-                    disabled={composerEditorLocked || settingsLocked}
-                    dense={effectiveDenseToolbar}
-                    iconOnly={useUltraCompactToolbar}
-                    visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
-                  />
-                )}
+                <PermissionSelector
+                  permissionMode={activePermissionMode}
+                  onPermissionModeChange={handlePermissionModeChange}
+                  vendorKey={vendorKey}
+                  deviceId={deviceLinkDeviceId ?? undefined}
+                  disabled={composerEditorLocked || settingsLocked}
+                  dense={effectiveDenseToolbar}
+                  iconOnly={useUltraCompactToolbar}
+                  visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
+                />
                 {useNarrowToolbar && !useCompactMiddleToolbar && <>{middleToolbarSlot}</>}
               </div>
               <div
@@ -8249,8 +8241,8 @@ export function ChatInput({
                   ) : (
                     <>{middleToolbarSlot}</>
                   ))}
-                {/* 模型选择器对每种会话一视同仁 —— 伙伴对话也要能就地切模型，
-                    权限仍由伙伴设置统一管理。 */}
+                {/* 模型选择器对每种会话一视同仁 —— 伙伴对话也要能就地换引擎/模型
+                    (裁决 2026-08-19),写回由调用方决定落到会话还是伙伴 Profile。 */}
                 <div className={useNarrowToolbar ? 'min-w-0 shrink' : undefined}>
                   <ModelSelector
                     // 选中态一律是会话 / 草稿持有的 **wire model id**(sessions.model 或

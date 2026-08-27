@@ -31,11 +31,10 @@ describe('Bot 对话的判定条件', () => {
     expect(sessionView).toContain('botChatIdentity ? (\n        <BotAvatar bot={botChatIdentity}');
   });
 
-  it('伙伴对话只隐藏权限入口,保留模型切换,普通任务仍走原占位符', () => {
+  it('伙伴对话只换占位符,不再动运行时控件', () => {
     expect(sessionView).toContain('botComposerPlaceholderKey(botChatIdentity.name)');
     // 普通任务仍走原来的占位符。
     expect(sessionView).toContain("t('ccAgent.layout.chatPlaceholder')");
-    expect(sessionView).toContain('hidePermissionSelector={Boolean(botChatIdentity)}');
   });
 
   it('伙伴对话换掉任务顶栏,而不是在它旁边再加一个', () => {
@@ -63,25 +62,41 @@ describe('消息流的头像挂载', () => {
   });
 });
 
-describe('输入框的运行时控件门控', () => {
-  it('ChatInput 只支持隐藏权限入口,模型选择器仍无条件渲染', () => {
-    expect(chatInput).toContain('hidePermissionSelector?: boolean;');
-    expect(chatInput).toContain('hidePermissionSelector = false,');
-    expect(chatInput).toContain('{!hidePermissionSelector && (');
+/**
+ * 裁决逆转 2026-08-19:伙伴对话**恢复**显示模型选择器与权限 chip。
+ *
+ * 收起它们的那版有两个实打实的问题:切伙伴时选择器区一闪一收(露馅),以及
+ * 「这个伙伴用哪个模型」本来就是刚需(查邮件用便宜的、写代码用贵的)。
+ * 「不暴露技术细节」改由默认值承载。这里锁住**不再有任何按会话类型隐藏控件的
+ * 分支** —— 一个 prop 删掉容易,悄悄加回来更容易。
+ */
+describe('输入框的运行时控件对所有会话一视同仁', () => {
+  it('ChatInput 里不再有 hideRuntimeSelectors 这条隐藏路径', () => {
+    // 注释里可以留下这段历史,JSX / 逻辑里不能再出现它。
+    const code = chatInput
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    expect(code).not.toContain('hideRuntimeSelectors');
+    expect(sessionView).not.toContain('hideRuntimeSelectors');
+  });
+
+  it('权限 chip 与模型选择器都无条件渲染', () => {
+    expect(chatInput).toContain('<PermissionSelector\n                  permissionMode=');
     expect(chatInput).toContain(
       "className={useNarrowToolbar ? 'min-w-0 shrink' : undefined}>\n                  <ModelSelector",
     );
   });
 
-  it('隐藏入口时也禁用权限快捷键轮切', () => {
+  it('键盘轮切只看 settingsLocked(审阅任务只读),不看会话类型', () => {
     expect(chatInput).toContain(
-      'settingsLocked || hidePermissionSelector\n        ? []\n        : (activeAgentCapabilities?.permissionModes ?? []),',
+      '() => (settingsLocked ? [] : (activeAgentCapabilities?.permissionModes ?? [])),',
     );
   });
 });
 
 /**
- * 伙伴会话仍由 Profile 驱动；模型可在 composer 切换并回写，权限只在设置页管理。
+ * 恢复选择器带来的**必须**配套:伙伴主任务会在 Renew 时按 Profile 的
+ * capabilities 重建,输入框只写会话行的话,用户选的模型会在 Renew 后回跳。
  */
 describe('伙伴对话的运行时选择回写 Profile', () => {
   it('模型 / effort / 权限 / 供应商 / fast 五个入口都接上了回写', () => {
