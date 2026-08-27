@@ -4,9 +4,6 @@ import type { BotAvatarHue } from './BotAvatar';
 import { CINDY_OFFICIAL_AVATAR, presetAvatarValue } from './botAvatarIdentity';
 import {
   NEW_BOT_DEFAULT_HARNESS,
-  NEW_BOT_DEFAULT_PI_EFFORT,
-  NEW_BOT_DEFAULT_PI_MODEL,
-  NEW_BOT_DEFAULT_PI_PROVIDER,
 } from '../../../shared/botDefaults';
 import { NEW_BOT_DEFAULT_PERMISSIONS } from './botCapabilityDefaults';
 import { BOT_AUTOMATION_DEFAULT } from '../../../shared/botAutomationCapability';
@@ -111,9 +108,6 @@ function seedMemory(
  */
 export const ASSISTANT_BASELINE_CAPABILITIES: Partial<BotCapabilities> = {
   harness: NEW_BOT_DEFAULT_HARNESS,
-  model: NEW_BOT_DEFAULT_PI_MODEL,
-  providerId: NEW_BOT_DEFAULT_PI_PROVIDER,
-  effort: NEW_BOT_DEFAULT_PI_EFFORT,
   automation: BOT_AUTOMATION_DEFAULT,
   sessionControlMode: 'none',
   permissions: NEW_BOT_DEFAULT_PERMISSIONS,
@@ -123,9 +117,6 @@ const ASSISTANT_CAPABILITIES = ASSISTANT_BASELINE_CAPABILITIES;
 
 const COORDINATOR_CAPABILITIES: Partial<BotCapabilities> = {
   harness: NEW_BOT_DEFAULT_HARNESS,
-  model: NEW_BOT_DEFAULT_PI_MODEL,
-  providerId: NEW_BOT_DEFAULT_PI_PROVIDER,
-  effort: NEW_BOT_DEFAULT_PI_EFFORT,
   automation: BOT_AUTOMATION_DEFAULT,
   sessionControlMode: 'coordinate',
   permissions: NEW_BOT_DEFAULT_PERMISSIONS,

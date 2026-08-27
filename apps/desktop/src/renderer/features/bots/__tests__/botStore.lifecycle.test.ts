@@ -16,6 +16,7 @@ vi.mock('@/state/newMakerDraft', () => ({
 
 vi.mock('@/lib/modelDefinitions', () => ({
   getDefaultModelForVendor: () => ({ id: 'claude-sonnet-4-6', defaultEffort: 'medium' }),
+  getModelsForVendor: () => [],
 }));
 
 vi.mock('../botReadState', () => ({

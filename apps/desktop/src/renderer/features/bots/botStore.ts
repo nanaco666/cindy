@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { getDraft, getPersistedVendorModel } from '@/state/newMakerDraft';
-import { getDefaultModelForVendor } from '@/lib/modelDefinitions';
+import { getDefaultModelForVendor, getModelsForVendor } from '@/lib/modelDefinitions';
 import {
   NEW_BOT_DEFAULT_HARNESS,
   NEW_BOT_DEFAULT_PI_EFFORT,
@@ -292,20 +292,44 @@ const SQLITE_MIGRATION_KEY = 'cindy.bots.v1.sqlite-migrated';
  * `lastByVendor[vendor].model`,把种子快照当成用户的选择,与新建那边曾经的
  * bug 完全同形。同一个决定不留两份实现。
  *
- * 两条都必须走既有来源,这里不产生任何自己的模型口径:
+ * 两条都必须走既有来源,这里只加一层有界首选:
  *  - `lastByVendor` 的整份快照会随任意 draft 写入落盘,里面的 model 即使用户从没碰过
  *    也带着种子默认 —— 直接读它,新建的每个伙伴都会撞上种子档,与用户自己选的无关
  *    (2026-08-21 用户实测投诉)。`modelChosenByVendor` 才是「真选过」的判据,
  *    `getPersistedVendorModel` 就是按它做的读取。
- *  - 没选过时取 `getDefaultModelForVendor()`,也就是**模型选择器给新对话用的同一个
- *    默认值**(服务端目录的 newSessionDefault)。此处曾写死一个更便宜的型号当「保守
- *    兜底」,结果全新安装的伙伴一律显示那个写死值 —— 那是自造的第三份默认口径,
- *    与选择器打架,已删除。要调默认档位就去改目录,不在这里分叉。
+ *  - Pi 优先 DeepSeek V4 Flash,但只有它确实出现在当前可用且默认可见的模型清单里
+ *    才选;没有就退回 `getDefaultModelForVendor('pi')`。fallback 的 provider / effort
+ *    必须跟目录默认一起切,不能留下 DeepSeek 的来源与强度。
+ *  - 其它 harness 仍直接取 `getDefaultModelForVendor()`,也就是模型选择器给新对话用的
+ *    同一个默认值(服务端目录的 newSessionDefault)。
  */
+function defaultBotModelSettings(vendor: ReturnType<typeof vendorForHarness>): BotModelOverride {
+  if (vendor === 'pi') {
+    const preferred = getModelsForVendor(vendor).find(
+      (model) =>
+        model.id === NEW_BOT_DEFAULT_PI_MODEL && model.defaultEnabled !== false,
+    );
+    if (preferred) {
+      return {
+        model: preferred.id,
+        providerId: NEW_BOT_DEFAULT_PI_PROVIDER,
+        effort: NEW_BOT_DEFAULT_PI_EFFORT,
+        fastMode: false,
+      };
+    }
+  }
+  const fallback = getDefaultModelForVendor(vendor);
+  return {
+    model: fallback.id,
+    providerId: null,
+    effort: fallback.defaultEffort ?? '',
+    fastMode: false,
+  };
+}
+
 export function defaultBotModel(vendor: ReturnType<typeof vendorForHarness>): string {
   // `||` 不是 `??`:「没选过」在 getPersistedVendorModel 里是空串,不是 null。
-  if (vendor === 'pi') return getPersistedVendorModel(vendor) || NEW_BOT_DEFAULT_PI_MODEL;
-  return getPersistedVendorModel(vendor) || getDefaultModelForVendor(vendor).id;
+  return getPersistedVendorModel(vendor) || defaultBotModelSettings(vendor).model;
 }
 
 const BOT_GLOBAL_MODEL_KEY = 'cindy.bots.global-model-overrides.v1';
@@ -347,18 +371,7 @@ export function getEffectiveBotModelSettings(
 ): BotModelOverride {
   const selected = override ?? getBotGlobalModelOverride(vendor);
   if (selected) return selected;
-  const model = vendor === 'pi'
-    ? {
-        id: NEW_BOT_DEFAULT_PI_MODEL,
-        defaultEffort: NEW_BOT_DEFAULT_PI_EFFORT,
-      }
-    : getDefaultModelForVendor(vendor);
-  return {
-    model: model.id,
-    providerId: vendor === 'pi' ? NEW_BOT_DEFAULT_PI_PROVIDER : null,
-    effort: model.defaultEffort ?? '',
-    fastMode: false,
-  };
+  return defaultBotModelSettings(vendor);
 }
 
 export function setBotGlobalModelOverride(

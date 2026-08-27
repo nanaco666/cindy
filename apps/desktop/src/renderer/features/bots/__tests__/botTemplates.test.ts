@@ -39,14 +39,12 @@ describe('Bot roster templates', () => {
     }
   });
 
-  it('uses Pi DeepSeek V4 Flash as the default for every new roster character', () => {
+  it('uses Pi for every new roster character and leaves model routing to creation time', () => {
     for (const template of BOT_TEMPLATES) {
-      expect(template.capabilities, template.id).toMatchObject({
-        harness: 'pi',
-        model: 'deepseek-v4-flash',
-        providerId: 'deepseek',
-        effort: 'high',
-      });
+      expect(template.capabilities.harness, template.id).toBe('pi');
+      expect(template.capabilities.model, template.id).toBeUndefined();
+      expect(template.capabilities.providerId, template.id).toBeUndefined();
+      expect(template.capabilities.effort, template.id).toBeUndefined();
     }
   });
 

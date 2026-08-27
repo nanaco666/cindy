@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   addBotProfile,
@@ -11,15 +11,53 @@ import {
   setBotPinned,
   updateBotProfile,
 } from '../botStore';
-import { getDefaultModelForVendor } from '@/lib/modelDefinitions';
+import { getDefaultModelForVendor, getModelsForVendor } from '@/lib/modelDefinitions';
 import { getPersistedVendorModel } from '@/state/newMakerDraft';
 
 vi.mock('@/lib/modelDefinitions', () => ({
-  getDefaultModelForVendor: vi.fn(() => ({ id: 'catalog-new-session-default' })),
+  getDefaultModelForVendor: vi.fn(() => ({
+    id: 'catalog-new-session-default',
+    label: 'Catalog default',
+    description: '',
+    efforts: ['medium'],
+    defaultEffort: 'medium',
+    vendorKey: 'pi',
+  })),
+  getModelsForVendor: vi.fn(() => [
+    {
+      id: 'deepseek-v4-flash',
+      label: 'DeepSeek V4 Flash',
+      description: '',
+      efforts: ['high'],
+      defaultEffort: 'high',
+      vendorKey: 'pi',
+    },
+  ]),
 }));
 
 describe('bot profile store', () => {
   const createdIds: string[] = [];
+
+  beforeEach(() => {
+    vi.mocked(getDefaultModelForVendor).mockReturnValue({
+      id: 'catalog-new-session-default',
+      label: 'Catalog default',
+      description: '',
+      efforts: ['medium'],
+      defaultEffort: 'medium',
+      vendorKey: 'pi',
+    });
+    vi.mocked(getModelsForVendor).mockReturnValue([
+      {
+        id: 'deepseek-v4-flash',
+        label: 'DeepSeek V4 Flash',
+        description: '',
+        efforts: ['high'],
+        defaultEffort: 'high',
+        vendorKey: 'pi',
+      },
+    ]);
+  });
 
   afterEach(() => {
     for (const id of createdIds.splice(0)) removeBotProfile(id);
@@ -58,7 +96,7 @@ describe('bot profile store', () => {
     expect(bot.capabilities.model).toBe('catalog-new-session-default');
   });
 
-  it('defaults new Bots to Pi DeepSeek V4 Flash', () => {
+  it('defaults new Bots to Pi DeepSeek V4 Flash when it is available', () => {
     const bot = addBotProfile({ name: 'Pi Bot', channel: 'local', description: '' });
     createdIds.push(bot.id);
 
@@ -67,6 +105,20 @@ describe('bot profile store', () => {
       model: 'deepseek-v4-flash',
       providerId: 'deepseek',
       effort: 'high',
+    });
+  });
+
+  it('falls back to the Pi catalog default when DeepSeek V4 Flash is unavailable', () => {
+    vi.mocked(getModelsForVendor).mockReturnValue([]);
+
+    const bot = addBotProfile({ name: 'Fallback Bot', channel: 'local', description: '' });
+    createdIds.push(bot.id);
+
+    expect(bot.capabilities).toMatchObject({
+      harness: 'pi',
+      model: 'catalog-new-session-default',
+      providerId: null,
+      effort: 'medium',
     });
   });
 
