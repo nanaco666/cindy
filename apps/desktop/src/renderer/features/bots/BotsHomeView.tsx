@@ -575,7 +575,7 @@ export function BotSettings({
                     {t('bots.background.title')}
                   </span>
                   <span
-                    className="mt-2 block line-clamp-5 text-12 leading-5 text-[var(--text-primary)]"
+                    className="mt-2 line-clamp-5 text-12 leading-5 text-[var(--text-primary)]"
                     title={background || t('bots.background.empty')}
                   >
                     {background || t('bots.background.empty')}
@@ -592,7 +592,7 @@ export function BotSettings({
                   </span>
                   {persona ? (
                     <span
-                      className="mt-2 block line-clamp-5 text-12 leading-5 text-[var(--text-primary)]"
+                      className="mt-2 line-clamp-5 text-12 leading-5 text-[var(--text-primary)]"
                       title={personaSummaryText(t, persona)}
                     >
                       {personaSummaryText(t, persona)}

@@ -345,7 +345,12 @@ describe('Bot settings page structure', () => {
 
     expect(screen.getByTestId('bot-avatar')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'PR steward' })).toBeTruthy();
-    expect(screen.getByTitle('Delivery steward')).toBeTruthy();
+    const responsibilities = screen
+      .getByRole('button', { name: 'bots.background.edit' })
+      .querySelector('[title]') as HTMLElement;
+    expect(responsibilities).toBeTruthy();
+    expect(responsibilities.className).toContain('line-clamp-5');
+    expect(responsibilities.className).not.toContain('block');
     expect(screen.getByRole('button', { name: 'bots.persona.adjustButton' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'bots.actions.message' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'bots.actions.addToGroup' })).toBeTruthy();
@@ -530,7 +535,9 @@ describe('profile persona summary and editor', () => {
       identitySource:
         '<!--persona:v1:{"style":"concise","proactivity":"reactive","call":"name"}-->\nzh\nen',
     });
-    expect(screen.getByText('persona-summary-fixture')).toBeTruthy();
+    const personality = screen.getByText('persona-summary-fixture');
+    expect(personality.className).toContain('line-clamp-5');
+    expect(personality.className).not.toContain('block');
     expect(screen.queryByText('bots.persona.summaryUnset')).toBeNull();
   });
 });
