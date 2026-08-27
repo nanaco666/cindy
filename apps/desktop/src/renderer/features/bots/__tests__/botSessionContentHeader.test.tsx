@@ -26,12 +26,26 @@ const { BOT_AUTOMATION_TOGGLE_EVENT, BotSessionContentHeader } =
 
 const bot = { id: 'bot-1', name: '小可' };
 
+function appRegionOf(element: HTMLElement): string {
+  return (element.style as CSSStyleDeclaration & { WebkitAppRegion?: string }).WebkitAppRegion ?? '';
+}
+
 afterEach(() => {
   cleanup();
   openBotArtifactsTab.mockClear();
 });
 
 describe('BotSessionContentHeader', () => {
+  it('leaves the header whitespace in the native window drag region', () => {
+    render(<BotSessionContentHeader bot={bot} sessionId="sess-1" />);
+
+    expect(appRegionOf(screen.getByTestId('bot-session-content-header'))).toBe('');
+    expect(appRegionOf(screen.getByTitle('bots.settings'))).toBe('no-drag');
+    expect(appRegionOf(screen.getByTestId('bot-artifacts-header-entry'))).toBe('no-drag');
+    expect(appRegionOf(screen.getByTestId('bot-automation-header-entry'))).toBe('no-drag');
+    expect(appRegionOf(screen.getByLabelText('bots.settings'))).toBe('no-drag');
+  });
+
   it('shows a visible deliverables entry that opens the library on click', () => {
     render(<BotSessionContentHeader bot={bot} sessionId="sess-1" />);
     const entry = screen.getByTestId('bot-artifacts-header-entry');

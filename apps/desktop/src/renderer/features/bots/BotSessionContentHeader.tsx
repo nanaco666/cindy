@@ -17,6 +17,7 @@ import { CalendarClock, Package, Settings2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
+import { WINDOW_NO_DRAG_STYLE } from '@/components/layout/windowDrag';
 import { openBotArtifactsTab } from '@/features/right-sidebar/lib/openBotArtifactsTab';
 import { useRegisterContentHeader } from '../feature-context';
 import { BotAvatar } from './BotAvatar';
@@ -54,14 +55,15 @@ export function BotSessionContentHeader({
 
   return (
     <div
+      data-testid="bot-session-content-header"
       className="flex h-full w-full min-w-0 items-center gap-2 pr-2"
-      style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
     >
       <button
         type="button"
         onClick={openSettings}
         title={t('bots.settings')}
         className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-13 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+        style={WINDOW_NO_DRAG_STYLE}
       >
         <BotAvatar bot={bot} size="xs" />
         <span className="min-w-0 truncate">{bot.name}</span>
@@ -74,6 +76,7 @@ export function BotSessionContentHeader({
             onClick={() => void openDeliverables()}
             title={t('bots.artifacts.openLibrary')}
             className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-12 text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            style={WINDOW_NO_DRAG_STYLE}
           >
             <Package size={14} aria-hidden="true" />
             <span className="hidden sm:inline">{t('rightSidebar.tabs.kinds.botArtifacts')}</span>
@@ -93,6 +96,7 @@ export function BotSessionContentHeader({
             onClick={() => window.dispatchEvent(new CustomEvent(BOT_AUTOMATION_TOGGLE_EVENT))}
             title={t('bots.automations.panelTitle')}
             className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-2 text-12 text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            style={WINDOW_NO_DRAG_STYLE}
           >
             <CalendarClock size={14} aria-hidden="true" />
             <span className="hidden sm:inline">{t('bots.automations.panelTitle')}</span>
@@ -104,6 +108,7 @@ export function BotSessionContentHeader({
         onClick={openSettings}
         aria-label={t('bots.settings')}
         className={`${sessionId ? '' : 'ml-auto '}flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]`}
+        style={WINDOW_NO_DRAG_STYLE}
       >
         <Settings2 size={15} />
       </button>
