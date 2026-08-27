@@ -14,9 +14,10 @@ import * as sessionService from '@/lib/sessionService';
 import { serializeAttachedFiles } from '@/lib/messageAttachmentPayload';
 import { cn } from '@/lib/utils';
 import { BotAvatar } from './BotAvatar';
+import { BotGroupAvatar } from './BotGroupAvatar';
+import { markBotGroupRead } from './botGroupReadState';
 import { BotGroupInteractionPanel } from './BotGroupInteractionPanel';
 import {
-  botGroupRoomState,
   normalizeBotGroupReferences,
   presentedRoomMessages,
 } from './botGroupChatPresentation';
@@ -79,6 +80,10 @@ export function BotGroupRoomView() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (state.kind === 'ready') markBotGroupRead(state.room.id);
+  }, [state]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -205,34 +210,21 @@ export function BotGroupRoomView() {
   }
 
   const { room } = state;
-  const roomState = botGroupRoomState(room);
   const memberBots = room.members
     .map((member) => bots.find((bot) => bot.id === member.botId))
     .filter((bot): bot is NonNullable<typeof bot> => Boolean(bot));
+  const memberAvatars = room.members.map((member) =>
+    bots.find((bot) => bot.id === member.botId) ?? { id: member.botId, name: member.name },
+  );
 
   return (
-    <main className="flex h-full min-h-0 flex-col bg-[var(--surface)]">
-      <header className="flex min-h-16 items-center gap-3 border-b border-[var(--border-default)] px-5 py-3">
-        <button
-          type="button"
-          onClick={() => navigate('/bots/groups')}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--surface-hover)]"
-          aria-label={t('bots.groups.back')}
-        >
-          <ArrowLeft size={17} />
-        </button>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-chip)] text-16" aria-hidden>
-          {room.avatar}
-        </div>
-        <div className="flex -space-x-1.5">
-          {memberBots.slice(0, 4).map((bot) => (
-            <BotAvatar key={bot.id} bot={bot} size="sm" className="ring-2 ring-[var(--surface)]" />
-          ))}
-        </div>
+    <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--surface)]">
+      <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-[var(--border-default)] px-5 py-3">
+        <BotGroupAvatar members={memberAvatars} />
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-15 font-medium text-[var(--text-primary)]">{room.name}</h1>
           <p className="truncate text-11 text-[var(--text-tertiary)]">
-            {t(`bots.groups.state.${roomState}`)} · {t('bots.groups.memberCount', { count: room.members.length })}
+            {t('bots.groups.memberCount', { count: room.members.length })}
           </p>
         </div>
         <button
@@ -307,7 +299,7 @@ export function BotGroupRoomView() {
         </div>
       </section>
 
-      <footer className="border-t border-[var(--border-default)] px-5 pb-4 pt-3">
+      <footer className="shrink-0 border-t border-[var(--border-default)] px-5 pb-4 pt-3">
         <div className="mx-auto w-full max-w-3xl">
           {activeInteraction ? (
             <div className="mb-3">

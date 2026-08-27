@@ -14,6 +14,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
+import * as messageService from '@/lib/messageService';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +26,7 @@ import { useAgentIslandActivityMap } from '@/state/agentIslandActivity';
 import { useSidebarCollapsedState, useRegisterSidebarUpper } from '../feature-context';
 import type { BotInboxItemView } from '../../../shared/botSessionEvents';
 import { BotAvatar } from './BotAvatar';
+import { BotGroupAvatar } from './BotGroupAvatar';
 import {
   botListSubtitle,
   botListTimestampAt,
@@ -32,7 +34,12 @@ import {
   formatBotUnreadBadge,
 } from './botListDisplay';
 import { subscribeBotReadState } from './botReadState';
-import { botGroupRoomState } from './botGroupChatPresentation';
+import {
+  getBotGroupLastReadAt,
+  seedMissingBotGroupReadState,
+  subscribeBotGroupReadState,
+} from './botGroupReadState';
+import { botGroupRoomState, presentedRoomMessages } from './botGroupChatPresentation';
 import { useBotGroupRooms } from './botGroupStore';
 import { isBotActiveNow, partitionBotRoster } from './botRosterDisplay';
 import {
@@ -74,6 +81,8 @@ function BotsSidebarContent() {
   const [showHidden, setShowHidden] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [menuBotId, setMenuBotId] = useState<string | null>(null);
+  const [groupRows, setGroupRows] = useState<Record<string, { summary: string; unread: number }>>({});
+  const [groupSummaryVersion, setGroupSummaryVersion] = useState(0);
 
   /*
     「正在输入…」的信号来源：灵动岛活动镜像(state/agentIslandActivity)。
@@ -150,6 +159,40 @@ function BotsSidebarContent() {
     };
   }, [bots]);
 
+  useEffect(() => {
+    if (groups.length === 0) return;
+    let cancelled = false;
+    const load = async () => {
+      seedMissingBotGroupReadState(groups.map((room) => room.id));
+      const entries = await Promise.all(groups.map(async (room) => {
+        try {
+          const messages = await messageService.list(room.roomSessionId, { limit: 100 });
+          const presented = presentedRoomMessages(messages);
+          const latest = presented[presented.length - 1]?.value;
+          if (!latest) return [room.id, { summary: '', unread: 0 }] as const;
+          const text = latest.text.trim();
+          const attachments = latest.attachments.length > 0
+            ? latest.attachments.join(', ')
+            : '';
+          const lastReadAt = getBotGroupLastReadAt(room.id) ?? Date.now();
+          const unread = presented.filter((message) =>
+            message.value.kind === 'bot' && Date.parse(message.createdAt) > lastReadAt,
+          ).length;
+          return [room.id, { summary: text || attachments, unread }] as const;
+        } catch {
+          return [room.id, { summary: '', unread: 0 }] as const;
+        }
+      }));
+      if (!cancelled) setGroupRows(Object.fromEntries(entries));
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [groupSummaryVersion, groups]);
+
+  useEffect(() => subscribeBotGroupReadState(() => {
+    setGroupSummaryVersion((version) => version + 1);
+  }), []);
+
   // A chat list has to move when a message lands. There is no Bot-scoped
   // message push, so reuse the existing localDb message broadcast and only
   // refresh when the row belongs to a Bot task (a normal Cindy chat must not
@@ -159,12 +202,15 @@ function BotsSidebarContent() {
     for (const bot of bots) {
       for (const session of bot.sessions) botSessionIds.add(session.id);
     }
-    if (botSessionIds.size === 0) return;
+    if (botSessionIds.size === 0 && groups.length === 0) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const subscribe = window.electronAPI?.localDb?.messages?.onCreated;
     if (typeof subscribe !== 'function') return;
     const unsubscribe = subscribe((payload: unknown) => {
       const sessionId = (payload as { sessionId?: unknown } | null)?.sessionId;
+      if (typeof sessionId === 'string' && groups.some((room) => room.roomSessionId === sessionId)) {
+        setGroupSummaryVersion((version) => version + 1);
+      }
       if (typeof sessionId !== 'string' || !botSessionIds.has(sessionId)) return;
       if (timer) return;
       timer = setTimeout(() => {
@@ -176,7 +222,7 @@ function BotsSidebarContent() {
       if (timer) clearTimeout(timer);
       unsubscribe?.();
     };
-  }, [bots]);
+  }, [bots, groups]);
 
   // Unread counts are computed main-side against the read positions this
   // renderer owns, so a read position moving (the user opened a Bot chat, or
@@ -583,7 +629,7 @@ function BotsSidebarContent() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => navigate('/bots/groups')}
+                  onClick={() => navigate('/bots/groups?create=1')}
                   className="rounded p-1 hover:bg-sidebar-item-hover"
                   aria-label={t('bots.groups.create')}
                 >
@@ -593,11 +639,22 @@ function BotsSidebarContent() {
               {groups.map((room) => {
                 const selected = location.pathname === `/bots/groups/${room.id}`;
                 const roomState = botGroupRoomState(room);
+                const groupRow = groupRows[room.id] ?? { summary: '', unread: 0 };
+                const subtitle = roomState === 'idle'
+                  ? groupRow.summary
+                  : t(`bots.groups.state.${roomState}`);
+                const memberAvatars = room.members.map((member) =>
+                  bots.find((bot) => bot.id === member.botId) ?? {
+                    id: member.botId,
+                    name: member.name,
+                  },
+                );
                 return (
                   <button
                     key={room.id}
                     type="button"
                     onClick={() => navigate(`/bots/groups/${room.id}`)}
+                    aria-current={selected ? 'page' : undefined}
                     className={cn(
                       'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors',
                       selected
@@ -605,15 +662,21 @@ function BotsSidebarContent() {
                         : 'text-[var(--sidebar-nav-text)] hover:bg-sidebar-item-hover',
                     )}
                   >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-elevated)] text-[var(--text-secondary)]">
-                      <MessageCircleMore size={15} />
-                    </span>
+                    <BotGroupAvatar members={memberAvatars} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-13 font-medium">{room.name}</span>
-                      <span className="block truncate text-11 text-[var(--sidebar-list-muted)]">
-                        {t(`bots.groups.state.${roomState}`)}
-                      </span>
+                      {subtitle ? (
+                        <span className="block truncate text-11 text-[var(--sidebar-list-muted)]">{subtitle}</span>
+                      ) : null}
                     </span>
+                    {groupRow.unread > 0 ? (
+                      <span
+                        className={UNREAD_BADGE_CLASS}
+                        aria-label={t('bots.list.unread', { count: groupRow.unread })}
+                      >
+                        {formatBotUnreadBadge(groupRow.unread)}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}

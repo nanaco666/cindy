@@ -47,6 +47,7 @@ import { setNewMakerDraftOwner } from '@/state/newMakerDraft';
 import { setModelVisibilityOwner } from '@/state/modelVisibilityPrefs';
 import { setComposerDraftOwner } from '@/lib/composerDraftStore';
 import { setBotReadStateOwner } from '@/features/bots/botReadState';
+import { setBotGroupReadStateOwner } from '@/features/bots/botGroupReadState';
 import { setPendingHandoffOwner } from '@/state/pendingFirstMessage';
 import { rememberSsoOrgIdentifier } from '@/state/ssoOrgHistory';
 import { setDeferredUiAssignmentOwner } from '@/features/cc-agent/deferredUiAssignment';
@@ -201,6 +202,7 @@ export function AuthProvider({
       setFavoriteAnchorMemoryOwner(state.dataOwnerId);
       setComposerDraftOwner(state.dataOwnerId);
       setBotReadStateOwner(state.dataOwnerId);
+      setBotGroupReadStateOwner(state.dataOwnerId);
       setPendingHandoffOwner(state.dataOwnerId);
       setDeferredUiAssignmentOwner(state.dataOwnerId);
       setUserPromptOwner(state.dataOwnerId);

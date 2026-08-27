@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   profiles: [] as unknown[],
   health: new Map<string, string>(),
   unread: {} as Record<string, number>,
+  groups: [] as unknown[],
+  groupMessages: new Map<string, unknown[]>(),
+  pathname: '/bots',
   refreshBotProfiles: vi.fn(),
   setBotHidden: vi.fn(async () => undefined),
   setBotPinned: vi.fn(async () => undefined),
@@ -30,7 +33,7 @@ vi.mock('@/state/agentIslandActivity', () => ({
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mocks.navigate,
-  useLocation: () => ({ pathname: '/bots' }),
+  useLocation: () => ({ pathname: mocks.pathname }),
   useParams: () => ({}),
 }));
 vi.mock('../../feature-context', () => ({
@@ -52,11 +55,12 @@ vi.mock('../botStore', () => ({
     bot.sessions?.find((session) => session.role === 'canonical' || session.kind === 'chat')?.id,
 }));
 vi.mock('../botGroupStore', () => ({
-  useBotGroupRooms: () => [],
+  useBotGroupRooms: () => mocks.groups,
 }));
 
 import type { BotInboxItemView } from '../../../../shared/botSessionEvents';
 import { BotsSidebar } from '../BotsSidebar';
+import { markBotGroupRead, resetBotGroupReadStateForTests } from '../botGroupReadState';
 import { markBotRead, resetBotReadStateForTests } from '../botReadState';
 
 interface BotFixture {
@@ -100,6 +104,7 @@ beforeEach(() => {
   messageListeners = [];
   window.localStorage.clear();
   resetBotReadStateForTests();
+  resetBotGroupReadStateForTests();
   mocks.navigate.mockReset();
   mocks.refreshBotProfiles.mockReset();
   mocks.setBotHidden.mockReset();
@@ -110,6 +115,9 @@ beforeEach(() => {
   mocks.duplicateBotProfile.mockResolvedValue({ id: 'copy' });
   mocks.health = new Map();
   mocks.unread = {};
+  mocks.groups = [];
+  mocks.groupMessages = new Map();
+  mocks.pathname = '/bots';
   mocks.profiles = [];
   mocks.registered.node = null;
   mocks.islandActivity = new Map();
@@ -125,6 +133,7 @@ beforeEach(() => {
       },
       localDb: {
         messages: {
+          list: vi.fn(async (sessionId: string) => mocks.groupMessages.get(sessionId) ?? []),
           onCreated: (cb: (payload: unknown) => void) => {
             messageListeners.push(cb);
             return () => {
@@ -194,7 +203,7 @@ describe('BotsSidebar 「正在输入…」', () => {
     mocks.profiles = [bot({ id: 'bot-1', name: 'PR steward' })];
     mocks.unread = { 'bot-1': 4 };
     mocks.islandActivity = new Map([['bot-1-chat', { sessionId: 'bot-1-chat', phase: 'running' }]]);
-    const view = await renderSidebar();
+    await renderSidebar();
 
     const line = screen.getByText('bots.list.typing');
     expect(line).toBeTruthy();
@@ -205,6 +214,57 @@ describe('BotsSidebar 「正在输入…」', () => {
 });
 
 describe('BotsSidebar rows', () => {
+  it('shows group member avatars, the latest summary, selected state, and unread replies', async () => {
+    mocks.profiles = [bot({ id: 'bot-a', name: 'Alpha' }), bot({ id: 'bot-b', name: 'Beta' })];
+    mocks.groups = [{
+      id: 'room-1',
+      name: 'Alpha & Beta',
+      avatar: '👥',
+      roomSessionId: 'room-session',
+      status: 'active',
+      epoch: 1,
+      running: false,
+      needsUser: false,
+      createdAt: 1,
+      updatedAt: 2,
+      members: [
+        { botId: 'bot-a', sessionId: 'a-session', rosterOrder: 0 },
+        { botId: 'bot-b', sessionId: 'b-session', rosterOrder: 1 },
+      ],
+    }];
+    mocks.pathname = '/bots/groups/room-1';
+    markBotGroupRead('room-1', 1_000);
+    mocks.groupMessages.set('room-session', [{
+      id: 'message-1',
+      rowid: 2,
+      createdAt: new Date(2_000).toISOString(),
+      role: 'assistant',
+      content: 'Latest group reply',
+      agentMeta: {
+        botGroup: { senderKind: 'bot', botId: 'bot-a', name: 'Alpha', threadId: 'thread-1' },
+      },
+    }]);
+
+    await renderSidebar();
+
+    await waitFor(() => expect(screen.getByText('Latest group reply')).toBeTruthy());
+    const row = screen.getByText('Alpha & Beta').closest('button');
+    expect(row?.getAttribute('aria-current')).toBe('page');
+    expect(screen.getByLabelText('bots.list.unread:{"count":1}').textContent).toBe('1');
+    const groupAvatar = row?.querySelector('[data-testid="bot-group-avatar"]');
+    expect(groupAvatar?.className).toContain('h-10');
+    expect(groupAvatar?.className).toContain('w-10');
+    expect(groupAvatar?.className).toContain('rounded-full');
+    expect(groupAvatar?.querySelectorAll('[data-testid="bot-group-avatar-member"]')).toHaveLength(2);
+    expect(screen.queryByText('bots.groups.state.idle')).toBeNull();
+  });
+
+  it('opens group creation directly from the section plus button', async () => {
+    mocks.profiles = [bot({ id: 'bot-1', name: 'Only bot' })];
+    await renderSidebar();
+    fireEvent.click(screen.getByLabelText('bots.groups.create'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/bots/groups?create=1');
+  });
   it('shows durable Hermes attention without reviving the permissions badge', async () => {
     mocks.profiles = [bot({ id: 'bot-1', name: 'Needs help', needsAttention: true })];
 

@@ -1,29 +1,50 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Check, MessageCircleMore, Plus, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Check, MessageCircleMore, X } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { BotAvatar } from './BotAvatar';
 import { canonicalBotSessionId, useBotProfiles } from './botStore';
 import { createBotGroupRoom, useBotGroupRooms } from './botGroupStore';
-import { botGroupRoomState } from './botGroupChatPresentation';
+import { formatBotGroupDefaultName } from './botGroupChatPresentation';
 
 export function BotGroupRoomsHome() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const rooms = useBotGroupRooms();
   const bots = useBotProfiles().filter(
     (bot) => bot.status === 'active' && Boolean(canonicalBotSessionId(bot)),
   );
-  const [open, setOpen] = useState(false);
+  const createRequested = searchParams.get('create') === '1';
+  const [open, setOpen] = useState(createRequested);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canCreate = selected.length >= 2 && selected.length <= 6 && !creating;
   const selectedSet = useMemo(() => new Set(selected), [selected]);
+
+  useEffect(() => {
+    if (createRequested || rooms.length === 0) return;
+    const recent = rooms.reduce((latest, room) =>
+      room.updatedAt > latest.updatedAt ? room : latest,
+    );
+    navigate(`/bots/groups/${recent.id}`, { replace: true });
+  }, [createRequested, navigate, rooms]);
+
+  useEffect(() => {
+    if (createRequested) setOpen(true);
+  }, [createRequested]);
+
+  const changeOpen = (next: boolean) => {
+    setOpen(next);
+    if (!next && createRequested) {
+      setSearchParams({}, { replace: true });
+    }
+  };
 
   const toggle = (botId: string) => {
     setSelected((current) =>
@@ -41,7 +62,9 @@ export function BotGroupRoomsHome() {
     setError(null);
     try {
       const room = await createBotGroupRoom({
-        name: name.trim() || t('bots.groups.defaultName'),
+        name: name.trim() || formatBotGroupDefaultName(
+          selected.map((id) => bots.find((bot) => bot.id === id)?.name ?? ''),
+        ),
         memberBotIds: selected,
       });
       setOpen(false);
@@ -58,25 +81,6 @@ export function BotGroupRoomsHome() {
   return (
     <main className="h-full overflow-y-auto bg-[var(--surface)] px-6 py-8">
       <div className="mx-auto w-full max-w-4xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-24 font-semibold text-[var(--text-primary)]">
-              {t('bots.groups.title')}
-            </h1>
-            <p className="mt-1 text-13 leading-5 text-[var(--text-secondary)]">
-              {t('bots.groups.description')}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-[var(--accent-cta-bg)] px-3 text-12 font-medium text-[var(--accent-pure-cta-fg)]"
-          >
-            <Plus size={15} />
-            {t('bots.groups.create')}
-          </button>
-        </div>
-
         {rooms.length === 0 ? (
           <button
             type="button"
@@ -91,46 +95,10 @@ export function BotGroupRoomsHome() {
               {t('bots.groups.emptyDescription')}
             </span>
           </button>
-        ) : (
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            {rooms.map((room) => {
-              const state = botGroupRoomState(room);
-              return (
-                <button
-                  key={room.id}
-                  type="button"
-                  onClick={() => navigate(`/bots/groups/${room.id}`)}
-                  className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-4 text-left transition-colors hover:bg-[var(--surface-hover)]"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="flex min-w-0 items-center gap-2.5">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-chip)] text-15" aria-hidden>
-                        {room.avatar}
-                      </span>
-                      <span className="min-w-0 truncate text-14 font-medium text-[var(--text-primary)]">
-                        {room.name}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-11 text-[var(--text-tertiary)]">
-                      {t(`bots.groups.state.${state}`)}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex -space-x-1.5">
-                    {room.members.map((member) => {
-                      const bot = bots.find((candidate) => candidate.id === member.botId);
-                      return bot ? (
-                        <BotAvatar key={member.botId} bot={bot} size="sm" className="ring-2 ring-[var(--surface-elevated)]" />
-                      ) : null;
-                    })}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        ) : null}
       </div>
 
-      <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Root open={open} onOpenChange={changeOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-[var(--overlay-modal)]" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[82vh] w-[min(520px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5">

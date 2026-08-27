@@ -95,6 +95,16 @@ export function presentBotGroupMessage(
 
 export type BotGroupRoomState = 'idle' | 'running' | 'needs-user' | 'error' | 'archived';
 
+/** Build the durable name used by both the room header and the sidebar row. */
+export function formatBotGroupDefaultName(names: readonly string[]): string {
+  const normalized = names.map((name) => name.trim()).filter(Boolean);
+  if (normalized.length === 0) return '';
+  if (normalized.length === 1) return normalized[0];
+  if (normalized.length === 2) return `${normalized[0]} & ${normalized[1]}`;
+  if (normalized.length === 3) return `${normalized[0]}, ${normalized[1]} & ${normalized[2]}`;
+  return `${normalized[0]}, ${normalized[1]} +${normalized.length - 2}`;
+}
+
 export function botGroupRoomState(
   room: Pick<BotGroupRoomProjection, 'status' | 'running' | 'needsUser'>,
 ): BotGroupRoomState {

@@ -4,12 +4,19 @@ import { buildBotReferenceHref } from '@cindy/maker-shared/agent-input-projectio
 
 import {
   botGroupRoomState,
+  formatBotGroupDefaultName,
   normalizeBotGroupReferences,
   presentBotGroupMessage,
   presentedRoomMessages,
 } from '../botGroupChatPresentation';
 
 describe('Bot group chat presentation', () => {
+  it('formats durable default names from selection order', () => {
+    expect(formatBotGroupDefaultName(['A', 'B'])).toBe('A & B');
+    expect(formatBotGroupDefaultName(['A', 'B', 'C'])).toBe('A, B & C');
+    expect(formatBotGroupDefaultName(['A', 'B', 'C', 'D', 'E'])).toBe('A, B +3');
+    expect(formatBotGroupDefaultName([' A ', '', 'B'])).toBe('A & B');
+  });
   it('reads the durable sender identity from message agent metadata', () => {
     expect(
       presentBotGroupMessage({
