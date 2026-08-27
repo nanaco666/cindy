@@ -4983,6 +4983,7 @@ export function CCAgentSessionView({
                   pendingQueue={pendingQueue}
                   disabled={readOnly || remoteHandoffPreparing || session?.source === 'review'}
                   settingsLocked={readOnly || session?.source === 'review'}
+                  hideRuntimeControls={Boolean(botChatIdentity)}
                   queuePaused={queuePaused}
                   queueExpanded={queueExpanded}
                   onQueueExpandedChange={setQueueExpanded}
