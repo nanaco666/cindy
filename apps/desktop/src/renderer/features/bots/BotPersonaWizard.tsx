@@ -16,7 +16,7 @@ import {
   type PersonaStyle,
 } from './botPersona';
 
-const DEFAULT_SELECTION: PersonaSelection = {
+export const DEFAULT_PERSONA_SELECTION: PersonaSelection = {
   style: 'concise',
   proactivity: 'reactive',
   call: 'name',
@@ -41,7 +41,7 @@ export function personaSummaryText(t: Translate, selection: PersonaSelection | n
   return [style, proactivity, call].join(' · ');
 }
 
-function OptionCard({
+export function PersonaOptionCard({
   title,
   description,
   selected,
@@ -77,16 +77,92 @@ function OptionCard({
   );
 }
 
-/**
- * 3 步人格引导("调整性格")。只管自己那段 marker 区间——decompile 失败或没有
- * marker 时退回默认选项,绝不代人删掉 marker 以外的手写文本。
- *
- * 曾经这里还折叠着一个「高级:自己写设定」,展开是**整份** identitySource 的
- * textarea。它已经撤掉:那是当时唯一能碰到背景正文的入口,而它一次性覆盖整份
- * 文本,连向导自己那段 marker 都可能被顺手删掉。现在背景正文在设置页「TA 是谁」
- * 里有一等公民的「背景设定」子块(读写走 `readBotBackground` / `writeBotBackground`),
- * 两段各有各的入口、谁也不覆盖谁,这个藏起来的逃生口就没有存在的理由了。
- */
+export function PersonaEditorFields({
+  style,
+  proactivity,
+  call,
+  customCall,
+  onStyleChange,
+  onProactivityChange,
+  onCallChange,
+  onCustomCallChange,
+}: {
+  style: PersonaStyle;
+  proactivity: PersonaProactivity;
+  call: PersonaCallForm;
+  customCall: string;
+  onStyleChange: (value: PersonaStyle) => void;
+  onProactivityChange: (value: PersonaProactivity) => void;
+  onCallChange: (value: PersonaCallForm) => void;
+  onCustomCallChange: (value: string) => void;
+}) {
+  const { t } = useBotTranslation();
+
+  return (
+    <div className="flex flex-col gap-5">
+      <fieldset>
+        <legend className="text-12 font-medium text-[var(--text-primary)]">
+          {t('bots.persona.stepStyle')}
+        </legend>
+        <div className="mt-2 grid gap-2">
+          {PERSONA_STYLE_OPTIONS.map((option) => (
+            <PersonaOptionCard
+              key={option}
+              title={t(`bots.persona.style.${option}.label`)}
+              description={t(`bots.persona.style.${option}.description`)}
+              selected={style === option}
+              onSelect={() => onStyleChange(option)}
+            />
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend className="text-12 font-medium text-[var(--text-primary)]">
+          {t('bots.persona.stepProactivity')}
+        </legend>
+        <div className="mt-2 grid gap-2">
+          {PERSONA_PROACTIVITY_OPTIONS.map((option) => (
+            <PersonaOptionCard
+              key={option}
+              title={t(`bots.persona.proactivity.${option}.label`)}
+              description={t(`bots.persona.proactivity.${option}.description`)}
+              selected={proactivity === option}
+              onSelect={() => onProactivityChange(option)}
+            />
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend className="text-12 font-medium text-[var(--text-primary)]">
+          {t('bots.persona.stepCall')}
+        </legend>
+        <div className="mt-2 grid gap-2">
+          {PERSONA_CALL_OPTIONS.map((option) => (
+            <PersonaOptionCard
+              key={option}
+              title={t(`bots.persona.call.${option}`)}
+              description=""
+              selected={call === option}
+              onSelect={() => onCallChange(option)}
+            />
+          ))}
+        </div>
+        {call === 'custom' ? (
+          <input
+            value={customCall}
+            onChange={(event) => onCustomCallChange(event.target.value)}
+            placeholder={t('bots.persona.customCallPlaceholder')}
+            className="mt-2 h-9 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 text-13 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
+          />
+        ) : null}
+      </fieldset>
+    </div>
+  );
+}
+
+/** 三步人格引导只更新 persona marker，保留 marker 之外的背景正文。 */
 export function BotPersonaWizard({
   open,
   identitySource,
@@ -99,14 +175,16 @@ export function BotPersonaWizard({
   onSave: (nextIdentitySource: string) => void;
 }) {
   const { t } = useBotTranslation();
-  const [style, setStyle] = useState<PersonaStyle>(DEFAULT_SELECTION.style);
-  const [proactivity, setProactivity] = useState<PersonaProactivity>(DEFAULT_SELECTION.proactivity);
-  const [call, setCall] = useState<PersonaCallForm>(DEFAULT_SELECTION.call);
+  const [style, setStyle] = useState<PersonaStyle>(DEFAULT_PERSONA_SELECTION.style);
+  const [proactivity, setProactivity] = useState<PersonaProactivity>(
+    DEFAULT_PERSONA_SELECTION.proactivity,
+  );
+  const [call, setCall] = useState<PersonaCallForm>(DEFAULT_PERSONA_SELECTION.call);
   const [customCall, setCustomCall] = useState('');
 
   useEffect(() => {
     if (!open) return;
-    const parsed = extractPersonaFromIdentitySource(identitySource) ?? DEFAULT_SELECTION;
+    const parsed = extractPersonaFromIdentitySource(identitySource) ?? DEFAULT_PERSONA_SELECTION;
     setStyle(parsed.style);
     setProactivity(parsed.proactivity);
     setCall(parsed.call);
@@ -139,72 +217,24 @@ export function BotPersonaWizard({
           </Dialog.Description>
 
           <div className="mt-4 flex flex-col gap-4">
-            {/* ①②③。这三个序号不是装饰:标题上写着「选三下就好」,序号是把那句
-                承诺变得看得见的唯一方式——不然三个 fieldset 读起来像三张要填的表。 */}
-            <fieldset>
-              <legend className="text-12 font-medium text-[var(--text-primary)]">
-                {`① ${t('bots.persona.stepStyle')}`}
-              </legend>
-              <div className="mt-2 grid gap-2">
-                {PERSONA_STYLE_OPTIONS.map((option) => (
-                  <OptionCard
-                    key={option}
-                    title={t(`bots.persona.style.${option}.label`)}
-                    description={t(`bots.persona.style.${option}.description`)}
-                    selected={style === option}
-                    onSelect={() => setStyle(option)}
-                  />
-                ))}
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend className="text-12 font-medium text-[var(--text-primary)]">
-                {`② ${t('bots.persona.stepProactivity')}`}
-              </legend>
-              <div className="mt-2 grid gap-2">
-                {PERSONA_PROACTIVITY_OPTIONS.map((option) => (
-                  <OptionCard
-                    key={option}
-                    title={t(`bots.persona.proactivity.${option}.label`)}
-                    description={t(`bots.persona.proactivity.${option}.description`)}
-                    selected={proactivity === option}
-                    onSelect={() => setProactivity(option)}
-                  />
-                ))}
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend className="text-12 font-medium text-[var(--text-primary)]">
-                {`③ ${t('bots.persona.stepCall')}`}
-              </legend>
-              <div className="mt-2 grid gap-2">
-                {PERSONA_CALL_OPTIONS.map((option) => (
-                  <OptionCard
-                    key={option}
-                    title={t(`bots.persona.call.${option}`)}
-                    description=""
-                    selected={call === option}
-                    onSelect={() => setCall(option)}
-                  />
-                ))}
-              </div>
-              {call === 'custom' ? (
-                <input
-                  value={customCall}
-                  onChange={(event) => setCustomCall(event.target.value)}
-                  placeholder={t('bots.persona.customCallPlaceholder')}
-                  className="mt-2 h-9 w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 text-13 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
-                />
-              ) : null}
-            </fieldset>
+            <PersonaEditorFields
+              style={style}
+              proactivity={proactivity}
+              call={call}
+              customCall={customCall}
+              onStyleChange={setStyle}
+              onProactivityChange={setProactivity}
+              onCallChange={setCall}
+              onCustomCallChange={setCustomCall}
+            />
 
             <div className="rounded-xl bg-[var(--surface-chip)] px-3 py-2.5">
               <p className="text-11 font-medium uppercase tracking-[0.1em] text-[var(--text-tertiary)]">
                 {t('bots.persona.previewTitle')}
               </p>
-              <p className="mt-1 text-12 text-[var(--text-primary)]">{personaSummaryText(t, selection)}</p>
+              <p className="mt-1 text-12 text-[var(--text-primary)]">
+                {personaSummaryText(t, selection)}
+              </p>
             </div>
           </div>
 

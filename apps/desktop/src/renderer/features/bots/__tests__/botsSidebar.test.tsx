@@ -430,6 +430,19 @@ describe('BotsSidebar rows', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/bots/legacy-stopped?settings=1');
   });
 
+  it('keeps the row management menu open after a right click', async () => {
+    mocks.profiles = [bot({ id: 'bot-1', name: 'PR steward' })];
+
+    await renderSidebar();
+    fireEvent.contextMenu(screen.getByText('PR steward'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: 'bots.list.pin' })).toBeTruthy();
+      expect(screen.getByRole('menuitem', { name: 'bots.list.hide' })).toBeTruthy();
+      expect(screen.getByRole('menuitem', { name: 'bots.list.duplicate' })).toBeTruthy();
+    });
+  });
+
   it('shows an unread count only for Bots with unread replies, capped at 99+', async () => {
     mocks.profiles = [
       bot({ id: 'bot-read', name: 'Read', lastMessagePreview: 'Nothing new' }),

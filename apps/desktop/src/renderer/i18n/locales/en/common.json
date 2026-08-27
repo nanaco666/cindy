@@ -6494,6 +6494,10 @@
     "add": "Add teammate",
     "addTitle": "Add a teammate",
     "addDescription": "Create a local teammate first, then mount IM message channels when needed.",
+    "createMenu": {
+      "recruit": "Recruit from examples",
+      "create": "Create teammate"
+    },
     "createWizard": {
       "createFailed": "The teammate could not be created. Try again.",
       "templates": {
@@ -6637,11 +6641,13 @@
     "descriptionPlaceholder": "e.g. PR steward, personal assistant, project partner",
     "skillsLabel": "Skills",
     "skillsPlaceholder": "Comma-separated skill names",
-    "skillsDescription": "Stores references to installed Skills; the native Skill mechanism resolves and loads them at runtime.",
+    "skillsDescription": "Choose which Skills this teammate can use.",
     "skillCatalogLoading": "Loading the Skills available to this Harness…",
     "skillCatalogError": "Skills could not be loaded. Saved selections are preserved.",
     "skillAllowlistFrozenHint": "Pinned to exactly these. Skills added later will not reach this teammate — switch the selector above to “Follow global” to keep it up to date.",
     "skillCatalogEmpty": "No available Skills were found for this Harness and project.",
+    "skillCatalogExpand": "Show {{count}} more",
+    "skillCatalogCollapse": "Show less",
     "skillConfiguredUnavailable": "Unavailable — select to remove",
     "close": "Close",
     "avatarPicker": {
@@ -6745,6 +6751,28 @@
     "settingsNav": {
       "title": "Settings sections"
     },
+    "settingsTabs": {
+      "connections": "Capabilities & connections",
+      "growth": "Memory & growth",
+      "model": "Model",
+      "project": "Project",
+      "maintenance": "Maintenance"
+    },
+    "model": {
+      "description": "Choose the engine and model this teammate uses.",
+      "restoreDefault": "Restore default model"
+    },
+    "dataManagement": {
+      "title": "Data management",
+      "exportHint": "Export this teammate as a portable .cindy file."
+    },
+    "actions": {
+      "message": "Message",
+      "addToGroup": "Add to group",
+      "export": "Export"
+    },
+    "editProfile": "Edit teammate",
+    "editProfileDescription": "Update the teammate identity and description.",
     "emptyTitle": "No teammates yet",
     "emptyDescription": "Create a teammate with a clear role, then connect the tools and channels it needs.",
     "noDescription": "No description yet",
@@ -6755,8 +6783,6 @@
     "historySession": "Historical task",
     "open": "Open",
     "archived": "Archived",
-    "sessionLifecycleTitle": "Task lifecycle",
-    "sessionLifecycleDescription": "Compaction only reorganizes the underlying context; the main task, messages, and teammate identity stay in place.",
     "renew": "Compact context",
     "renewing": "Compacting…",
     "historyTitle": "Archived history",
@@ -6947,10 +6973,6 @@
     "userContextSourceDescription": "What they should know about you. Kept separate from their personality and from what they remember on their own, and frozen alongside the rest of the settings.",
     "chooseAvatar": "Choose avatar {{avatar}}",
     "chooseAvatarColor": "Choose avatar color {{color}}",
-    "advancedCapabilities": {
-      "title": "Technical details behind these abilities",
-      "description": "Which engine and model it runs on, plus tools and skills. You do not need to touch this for everyday use."
-    },
     "memoryRecovery": {
       "title": "Long-term memory is off for this teammate",
       "description": "Memory is now always on for new teammates. This one was turned off earlier, so here is the way back.",
@@ -6958,7 +6980,6 @@
     },
     "capabilitiesTitle": "Capabilities",
     "capabilitiesDescription": "These are the abilities it actually gets when a task starts.",
-    "capabilitiesDeferred": "Changes apply automatically on the next turn; no new task or history reset is needed.",
     "profileApply": {
       "title": "Settings saved",
       "description": "The new settings are saved, but this task is still running the old ones. Start a new task to use them — this one moves to history.",
@@ -6967,26 +6988,20 @@
       "saveFailed": "Teammate settings could not be saved. No changes were applied.",
       "renewFailed": "The new settings are saved, but a new task could not be started. This task is unchanged."
     },
-    "runtimeState": {
-      "saved": "Saved; applies on start",
-      "prepared": "Startup prepared; not yet confirmed",
-      "applied": "Active in current task",
-      "pendingRenew": "Waiting for next-turn refresh",
-      "degraded": "Some capabilities unavailable",
-      "failed": "Last startup failed; not applied"
-    },
     "modelLabel": "Model",
     "modelUnavailable": "{{model}} (currently unavailable)",
     "harnessLabel": "Engine",
     "capabilityMode": {
-      "inherit": "Use currently available",
-      "allowlist": "Choose individually"
+      "inherit": "Follow global",
+      "allowlist": "Custom"
     },
     "capabilityCatalogLoading": "Reading capabilities available to this project…",
     "capabilityCatalogError": "The capability catalog could not be loaded. Saved selections are preserved.",
-    "toolsetsLabel": "Cindy tools",
-    "toolsetCatalogEmpty": "This project has no configurable Cindy tools.",
-    "mcpServersLabel": "Custom MCP servers",
+    "toolsetsLabel": "Built-in Cindy tools",
+    "toolsetsDescription": "Choose which built-in Cindy tools this teammate can use.",
+    "toolsetCatalogEmpty": "This project has no configurable built-in Cindy tools.",
+    "mcpServersLabel": "Custom MCP",
+    "mcpServersDescription": "Choose which custom MCP servers this teammate can use.",
     "mcpCatalogEmpty": "No custom MCP servers are configured yet.",
     "capabilityApplied": "In use",
     "capabilityUnavailable": "Unavailable",
@@ -7116,9 +7131,6 @@
       },
       "delegateLimitsHint": "These two only bound sub-tasks this routine hands to other teammates — they do not cap its own usage."
     },
-    "permissionsLabel": "Permission mode",
-    "permissionAsk": "Ask before acting",
-    "permissionTrusted": "Trusted actions",
     "codexAutomaticCompact": "Codex teammates compact context on their own, and /new keeps the current task. Only start a new task when you actually need a clean slate.",
     "chatWelcome": "Chat with {{name}}",
     "previewHint": "Local preview — messages are not sent to a real Agent yet.",
@@ -7338,11 +7350,12 @@
     "advancedLinkLabel": "Advanced settings",
     "appearanceTitle": "Name and avatar",
     "persona": {
-      "title": "Personality and working style",
+      "title": "Personality",
       "description": "Use the three quick settings below for tone, initiative, and how they address you. Put fuller working preferences in the responsibilities field.",
       "freeformPlaceholder": "For example: be direct; warn me early about risks; ask before guessing.",
       "freeformHint": "This becomes part of the teammate's identity, not just a display preference.",
-      "adjustButton": "Configure",
+      "addButton": "Click to add",
+      "adjustButton": "Quick setup",
       "quickAdjustLabel": "Optional quick settings",
       "stepStyle": "Speaking style",
       "stepProactivity": "How proactive",
@@ -7417,6 +7430,7 @@
     },
     "learned": {
       "title": "What they've learned",
+      "description": "Skills and working methods this teammate has picked up over time.",
       "empty": "No know-how yet — give them a few things to do.",
       "notesTitle": "Notes they wrote for themselves",
       "deleteTitle": "Delete this skill",
@@ -7435,19 +7449,11 @@
       "hint": "See what they wrote down"
     },
     "abilityWall": {
-      "builtinTitle": "Built in",
-      "connectableTitle": "Can connect to",
-      "abilities": {
-        "writing": "✍️ Writing & files",
-        "research": "🔍 Research",
-        "doing": "🛠 Hands-on tasks",
-        "schedule": "⏰ Working on a schedule",
-        "collab": "🤝 Teaming up with other teammates"
-      },
-      "connectAccount": "Connect an account",
-      "imBlocked": "A teammate can only connect to one IM — disconnect {{channel}} first",
-      "connectedTitle": "Connected"
+      "empty": "No IM connections are currently available.",
+      "imBlocked": "A teammate can only connect to one IM — disconnect {{channel}} first"
     },
+    "imConnectionsTitle": "IM connections",
+    "imConnectionsDescription": "Manage the messaging accounts actually connected to this teammate.",
     "folders": {
       "addButton": "+ Give them a folder",
       "adding": "Adding…",
@@ -7526,14 +7532,14 @@
     "channelConnect": "Connect",
     "channelDisconnect": "Disconnect",
     "joined": {
-      "today": "joined today",
-      "yesterday": "joined yesterday",
-      "days": "joined {{n}} days ago",
-      "months": "joined {{n}} months ago",
-      "years": "joined {{n}} years ago"
+      "today": "Joined today",
+      "yesterday": "Joined yesterday",
+      "days": "Joined {{n}} days ago",
+      "months": "Joined {{n}} months ago",
+      "years": "Joined {{n}} years ago"
     },
     "background": {
-      "title": "Responsibilities, boundaries, and working style",
+      "title": "Responsibilities",
       "edit": "Edit",
       "done": "Done",
       "placeholder": "What they own, what they should advance proactively, which decisions require approval, and how they should communicate.",

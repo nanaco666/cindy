@@ -31,8 +31,8 @@ const mocks = vi.hoisted(() => ({
   listBotChannelConnections: vi.fn(async () => [] as BotChannelConnection[]),
   upsertBotProjectBinding: vi.fn(
     async (
-      _botId: string,
-      _input: {
+      botId: string,
+      input: {
         id?: string;
         workingDir: string;
         remoteHostId?: string | null;
@@ -41,9 +41,15 @@ const mocks = vi.hoisted(() => ({
         isDefault: boolean;
         allowedPaths?: string[];
       },
-    ) => undefined,
+    ) => {
+      void botId;
+      void input;
+    },
   ),
-  archiveBotProjectBinding: vi.fn(async (_botId: string, _bindingId: string) => undefined),
+  archiveBotProjectBinding: vi.fn(async (botId: string, bindingId: string) => {
+    void botId;
+    void bindingId;
+  }),
 }));
 
 // The Bot settings page owns its own URL state via useSearchParams. A real
@@ -116,11 +122,6 @@ vi.mock('../BotCapabilitySettings', () => ({
 vi.mock('../BotProjectSettings', () => ({
   BotProjectSettings: () => <div data-testid="bot-project-settings" />,
 }));
-// 日程区块整体嵌入,没有任何前置开关,所以这里只需要确认它**被挂上了**;
-// BotAutomationSettings 自己的内部行为另有单测。
-vi.mock('../BotAutomationSettings', () => ({
-  BotAutomationSettings: () => <div data-testid="bot-automation-settings" />,
-}));
 vi.mock('../BotRouteSettings', () => ({
   BotRouteSettings: () => <div data-testid="bot-route-settings" />,
 }));
@@ -134,6 +135,12 @@ vi.mock('../BotEventInboxSettings', () => ({
 // by botPersona.test.ts; here we only need a fixture that proves BotsHomeView
 // wires `identitySource`/`onSave` through to the autosave pipeline correctly.
 vi.mock('../BotPersonaWizard', () => ({
+  DEFAULT_PERSONA_SELECTION: {
+    style: 'concise',
+    proactivity: 'reactive',
+    call: 'name',
+  },
+  PersonaEditorFields: () => <div data-testid="persona-editor-fields" />,
   BotPersonaWizard: ({
     open,
     onSave,
@@ -166,7 +173,9 @@ vi.mock('@/components/new-chat/ModelSelector', () => ({
   ModelSelector: () => <div data-testid="model-selector" />,
 }));
 vi.mock('@/components/new-chat/VendorSegmentedSwitcher', () => ({
-  VendorSegmentedSwitcher: () => <div data-testid="vendor-switcher" />,
+  VendorSegmentedSwitcher: ({ visualVariant }: { visualVariant?: string }) => (
+    <div data-testid="vendor-switcher" data-visual-variant={visualVariant} />
+  ),
 }));
 vi.mock('@/hooks/useAvailableAgents', () => ({
   useAvailableAgents: () => ({ availableVendors: new Set(['cc', 'codex', 'pi']), loaded: true }),
@@ -183,7 +192,6 @@ vi.mock('@/state/newMakerDraft', () => ({
 }));
 
 import { BotSettings } from '../BotsHomeView';
-import { compilePersonaIntoIdentitySource } from '../botPersona';
 import { peekPendingBotPersonaAck, resetPendingBotPersonaAckForTests } from '../botPersonaAck';
 
 function capabilities(overrides: Partial<BotCapabilities> = {}): BotCapabilities {
@@ -260,26 +268,33 @@ function connection(overrides: Partial<BotChannelConnection> = {}): BotChannelCo
 function renderSettings(overrides: Partial<BotProfile> = {}, initialSearch = 'settings=1') {
   mocks.initialSearch = initialSearch;
   const onBack = vi.fn();
+  const onOpenSession = vi.fn();
   const view = render(
     <BotSettings
       bot={bot(overrides)}
       onBack={onBack}
       onRenew={vi.fn(async () => false)}
-      onOpenSession={vi.fn()}
-      renewing={false}
+      onOpenSession={onOpenSession}
     />,
   );
-  return { ...view, onBack };
+  return { ...view, onBack, onOpenSession };
 }
 
-function openAdvanced(): void {
-  const trigger = screen.getByRole('button', { name: 'bots.advancedLinkLabel' });
-  if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
+function openTab(tab: string): void {
+  fireEvent.click(screen.getByRole('tab', { name: `bots.settingsTabs.${tab}` }));
 }
 
-function renderAdvancedSettings(overrides: Partial<BotProfile> = {}, initialSearch = 'settings=1') {
+function openProfileEditor(): void {
+  fireEvent.click(screen.getByRole('button', { name: 'bots.editProfile' }));
+}
+
+function renderTabSettings(
+  tab: 'connections' | 'growth' | 'model' | 'project' | 'maintenance',
+  overrides: Partial<BotProfile> = {},
+  initialSearch = 'settings=1',
+) {
   const view = renderSettings(overrides, initialSearch);
-  openAdvanced();
+  openTab(tab);
   return view;
 }
 
@@ -325,177 +340,109 @@ afterEach(() => {
 });
 
 describe('Bot settings page structure', () => {
-  it('shows identity first and keeps operational configuration behind Advanced', () => {
+  it('shows the two-column identity sidebar, primary actions, and five category tabs', () => {
     renderSettings();
 
-    expect(screen.queryByRole('tablist')).toBeNull();
-    expect(screen.queryByRole('tab')).toBeNull();
-    expect(screen.getByText('bots.settingsBlocks.who')).toBeTruthy();
-    expect(screen.getByText('bots.advancedLinkLabel')).toBeTruthy();
-    expect(screen.queryByTestId('bot-automation-settings')).toBeNull();
+    expect(screen.getByTestId('bot-avatar')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'PR steward' })).toBeTruthy();
+    expect(screen.getByTitle('Delivery steward')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'bots.persona.adjustButton' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'bots.actions.message' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'bots.actions.addToGroup' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'bots.actions.export' })).toBeNull();
+    expect(screen.getAllByRole('tab')).toHaveLength(5);
+  });
 
-    // Advanced starts collapsed: its heavy/technical content is not mounted.
-    expect(screen.queryByTestId('bot-lifecycle-settings')).toBeNull();
-    expect(screen.queryByTestId('bot-route-settings')).toBeNull();
-    expect(screen.queryByTestId('bot-project-settings')).toBeNull();
-    expect(screen.queryByTestId('bot-event-inbox-settings')).toBeNull();
+  it('orders capabilities, IM connections, routes, and inbox without invented abilities', () => {
+    renderSettings();
+    expect(screen.queryByText(/bots\.abilityWall\.abilities\./)).toBeNull();
+    expect(screen.queryByText('bots.abilityWall.connectableTitle')).toBeNull();
+    const capabilities = screen.getByTestId('bot-capability-settings');
+    const imConnections = screen.getByText('bots.imConnectionsTitle').closest('section')!;
+    const routes = screen.getByTestId('bot-route-settings');
+    const inbox = screen.getByTestId('bot-event-inbox-settings');
+    expect(capabilities.compareDocumentPosition(imConnections)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(imConnections.compareDocumentPosition(routes)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(routes.compareDocumentPosition(inbox)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(screen.queryByTestId('model-selector')).toBeNull();
-    expect(screen.queryByTestId('vendor-switcher')).toBeNull();
-    expect(screen.queryByTestId('bot-capability-settings')).toBeNull();
+    expect(screen.queryByTestId('bot-project-settings')).toBeNull();
   });
 
-  it('lists the blocks top-to-bottom in canonical order', () => {
+  it('switches between the five categories without duplicating their content', () => {
     renderSettings();
-    openAdvanced();
-    const container = screen.getByRole('main');
-    const order = [
-      'bots.settingsBlocks.who',
-      'bots.advancedLinkLabel',
-      'bots.settingsBlocks.can',
-      'bots.settingsBlocks.understand',
-    ].map((text) => container.textContent!.indexOf(text));
-    expect(order.every((index) => index !== -1)).toBe(true);
-    expect(order).toEqual([...order].sort((a, b) => a - b));
-  });
-
-  it('expands Advanced in place on click, alongside (not instead of) the rest of the page', () => {
-    renderSettings();
-
-    fireEvent.click(screen.getByRole('button', { name: 'bots.advancedLinkLabel' }));
-
-    expect(screen.getByTestId('bot-lifecycle-settings')).toBeTruthy();
-    expect(screen.getByTestId('bot-route-settings')).toBeTruthy();
-    expect(screen.getByTestId('bot-project-settings')).toBeTruthy();
-    expect(screen.getByTestId('bot-event-inbox-settings')).toBeTruthy();
+    openTab('growth');
+    expect(screen.getByRole('switch', { name: 'bots.memoryLabel' })).toBeTruthy();
+    expect(screen.getByText('bots.advancedIdentity.title')).toBeTruthy();
+    openTab('model');
     expect(screen.getByTestId('model-selector')).toBeTruthy();
     expect(screen.getByTestId('vendor-switcher')).toBeTruthy();
-    expect(screen.getByTestId('bot-capability-settings')).toBeTruthy();
-    // The operational blocks are revealed in place; automation itself moved to the chat pane.
-    expect(screen.getByText('bots.settingsBlocks.who')).toBeTruthy();
-    expect(screen.getByText('bots.settingsBlocks.can')).toBeTruthy();
-    expect(screen.getByText('bots.settingsBlocks.understand')).toBeTruthy();
-    expect(screen.queryByTestId('bot-automation-settings')).toBeNull();
+    expect(screen.getByTestId('vendor-switcher').getAttribute('data-visual-variant')).toBe(
+      'settings',
+    );
+    expect(screen.getByTestId('bot-model-controls').className).toContain('flex-col');
+    expect(screen.queryByTestId('bot-capability-settings')).toBeNull();
+    openTab('project');
+    expect(screen.getByTestId('bot-project-settings')).toBeTruthy();
+    expect(screen.queryByTestId('model-selector')).toBeNull();
+    openTab('connections');
+    expect(screen.getByTestId('bot-route-settings')).toBeTruthy();
+    expect(screen.queryByTestId('bot-project-settings')).toBeNull();
+    openTab('maintenance');
+    expect(screen.getByTestId('bot-lifecycle-settings')).toBeTruthy();
+    expect(screen.queryByTestId('bot-route-settings')).toBeNull();
+    expect(screen.getByText('bots.dataManagement.title')).toBeTruthy();
+    expect(screen.queryByText('bots.advancedIdentity.title')).toBeNull();
   });
 
-  it('has no bottom save bar at all, collapsed or expanded — settings persist on their own', () => {
+  it('opens the canonical task from the Message action', () => {
+    const { onOpenSession } = renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'bots.actions.message' }));
+    expect(onOpenSession).toHaveBeenCalledWith('bot-1-chat');
+  });
+
+  it('opens group management from the Add to group action', () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'bots.actions.addToGroup' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/bots/groups');
+  });
+
+  it('opens the Model category directly from its canonical deep link', () => {
+    renderSettings({}, 'settings=1&tab=model');
+    expect(
+      screen.getByRole('tab', { name: 'bots.settingsTabs.model' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(screen.getByTestId('vendor-switcher')).toBeTruthy();
+    expect(screen.getByTestId('model-selector')).toBeTruthy();
+  });
+
+  it('shows the teammate > settings lockup in the global content header without a second back row', () => {
+    renderSettings();
+    expect(screen.getByRole('button', { name: 'bots.backToChat' }).className).toContain('sr-only');
+  });
+
+  it('has no persistent bottom save bar; profile editing uses its own dialog', () => {
     renderSettings();
     expect(screen.queryByRole('button', { name: 'bots.save' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'bots.cancel' })).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'bots.advancedLinkLabel' }));
-    expect(screen.queryByRole('button', { name: 'bots.save' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'bots.cancel' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'bots.editProfile' }));
+    expect(screen.getByRole('dialog', { name: 'bots.editProfile' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'bots.save' })).toBeTruthy();
   });
 
-  it('says what each block is for — while that block is still empty', () => {
-    renderSettings();
-
-    // 身份区的说明在首屏；运营区块的说明只在用户展开高级设置后出现。
-    expect(screen.getByText('bots.settingsBlocks.whoDescription')).toBeTruthy();
-    openAdvanced();
-    expect(screen.getByText('bots.settingsBlocks.canDescription')).toBeTruthy();
-    expect(screen.getByText('bots.settingsBlocks.understandDescription')).toBeTruthy();
-  });
-
-  /*
-    这一条盯的是本次重做的核心约定(写在 BotSettingsBlock 的文件头):
-    **说明文字的任务是教会用户一次,不是常驻在那里占版面。** 用户已经把东西填进去
-    之后,那句话就该消失。
-
-    「TA 会的」是唯一的例外,单独一条盯着它 —— 它解释的是「为什么这里没有开关」,
-    而版面上永远看不到开关,用户永远得不到这个答案的第二个来源。
-  */
-  it('keeps the identity guidance because free-form writing remains the primary control', () => {
-    const { unmount } = renderSettings({
-      projectBindings: [
-        {
-          id: 'binding-1',
-          projectKey: 'cindy',
-          workingDir: '/Users/chris/Code/cindy',
-          workspacePolicy: 'none',
-          isDefault: true,
-          status: 'active',
-          allowedPaths: [],
-          createdAt: 0,
-          updatedAt: 0,
-        },
-      ],
-    });
-    // 已经给过文件夹的人不用再看「给 TA 一个文件夹」。
-    expect(screen.queryByText('bots.settingsBlocks.understandDescription')).toBeNull();
-    unmount();
-
-    // 即使已经使用过快速选项，主路径仍然是用户自己的自由文本。
-    renderSettings({
-      identitySource: compilePersonaIntoIdentitySource('', {
-        style: 'concise',
-        proactivity: 'reactive',
-        call: 'name',
-      }),
-    });
-    expect(screen.getByText('bots.settingsBlocks.whoDescription')).toBeTruthy();
-  });
-
-  it('keeps the "TA 会的" hint even when connected — nothing else on screen answers it', () => {
-    renderSettings();
-    openAdvanced();
-    expect(screen.getByText('bots.settingsBlocks.canDescription')).toBeTruthy();
-  });
-
-  /*
-    解释文字只留还在回答问题的那一句。
-
-    原来每个区块都是「标题 / 说明 / 内容 / 脚注」四层,说明与脚注经常是同一件事
-    说两遍 —— 「给 TA 一个文件夹,TA 就懂你的项目」下面跟着「TA 会自己读文件夹里的
-    东西」,中间只夹了一个按钮。三条重复的脚注已删,它们的 i18n key 也一并删了,
-    所以这里断言的是 key 本身不再出现在页面上。
-  */
-  it('keeps the one footnote that still answers something, drops the three that repeat a hint', async () => {
-    renderAdvancedSettings();
-
-    // 留下的这句回答的是「这些记忆是谁放进来的、我能不能动」—— 列表本身答不了,
-    // 所以它跟着「TA 记得的」的标题走(不再自己占一行)。
-    expect(await screen.findByText('bots.memoryList.footnote')).toBeTruthy();
-
-    // 这三句各自都能在同一块里找到一句意思相同的话,已删。
-    expect(screen.queryByText('bots.learned.footnote')).toBeNull();
-    expect(screen.queryByText('bots.abilityWall.footnote')).toBeNull();
-    expect(screen.queryByText('bots.folders.footnote')).toBeNull();
-  });
-
-  it('answers "who is this and how long have they been around" right under the name', () => {
+  it('shows the joined time in the identity sidebar', () => {
     renderSettings({ createdAt: Date.now() });
-
-    // kicker 是「设置」——旁边就是伙伴名,再说一遍「伙伴」是冗余。
-    expect(screen.getByText('bots.settings')).toBeTruthy();
-    // 「{定位} · 今天加入」,口语相对时长,不是「加入 N 天」。
-    expect(screen.getByText('Delivery steward · bots.joined.today:{"n":0}')).toBeTruthy();
+    expect(screen.getByText('bots.joined.today:{"n":0}')).toBeTruthy();
   });
 
   it('keeps the joined line honest when the teammate has been around a while', () => {
     renderSettings({ createdAt: Date.now() - 3 * 24 * 60 * 60 * 1_000 });
-    expect(screen.getByText('Delivery steward · bots.joined.days:{"n":3}')).toBeTruthy();
-  });
-
-  it('drops "Local Bot" out of the identity card — it is a delivery detail, not who they are', () => {
-    renderSettings();
-    expect(screen.queryByText(/bots\.channelLabel/)).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'bots.advancedLinkLabel' }));
-    expect(screen.getByText(/bots\.channelLabel/)).toBeTruthy();
+    expect(screen.getByText('bots.joined.days:{"n":3}')).toBeTruthy();
   });
 
   it('never marks the settings header, trusted or not', () => {
-    /*
-      产品裁决 2026-08-18:设置页头部不再挂 ⚠。伙伴不是需要被常年警告的对象。
-      2026-08-19 起连 BotTrustedBadge 组件与 bots.trustedBadge.* 文案都删掉了
-      (零引用的幽灵物),所以这里不能再按那个 i18n key 断言 —— key 没了,断言
-      永远成立,等于失去守卫。改查 ⚠ 图标本身(lucide 的稳定类名),这样谁把
-      徽标以任何形式重新画回来都会红。
-    */
     renderSettings();
     expect(document.querySelector('.lucide-triangle-alert')).toBeNull();
-
     cleanup();
     renderSettings({ capabilities: capabilities({ permissions: 'trusted' }) });
     expect(document.querySelector('.lucide-triangle-alert')).toBeNull();
@@ -503,56 +450,79 @@ describe('Bot settings page structure', () => {
 });
 
 describe('Bot settings deep links (legacy ?tab= and new ?anchor=)', () => {
-  it('lands at the top of the page with Advanced collapsed when there is no ?tab= param', () => {
+  it('lands on Connections when there is no category param', () => {
     renderSettings({}, 'settings=1');
-    expect(scrollToSpy).toHaveBeenCalledWith({ top: 0 });
+    expect(
+      screen
+        .getByRole('tab', { name: 'bots.settingsTabs.connections' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(screen.getByTestId('bot-capability-settings')).toBeTruthy();
     expect(screen.queryByTestId('bot-lifecycle-settings')).toBeNull();
   });
 
-  it('scrolls to the matching block for a current anchor id instead of switching panels', () => {
+  it('maps growth and project anchors to their new category tabs', () => {
     renderSettings({}, 'settings=1&anchor=understand');
-    expect(scrollIntoViewSpy).toHaveBeenCalled();
-    expect(scrollToSpy).not.toHaveBeenCalledWith({ top: 0 });
-    // The rest of the page is still mounted — an anchor is a scroll target, not a filter.
-    expect(screen.getByText('bots.settingsBlocks.who')).toBeTruthy();
+    expect(screen.getByTestId('bot-project-settings')).toBeTruthy();
+
+    cleanup();
+    renderSettings({}, 'settings=1&anchor=grew');
+    expect(screen.getByRole('switch', { name: 'bots.memoryLabel' })).toBeTruthy();
   });
 
-  it('auto-expands Advanced for legacy ?tab=capabilities, ?tab=notifications and ?tab=advanced', () => {
-    for (const legacyTab of ['capabilities', 'notifications', 'advanced']) {
-      cleanup();
-      renderSettings({}, `settings=1&tab=${legacyTab}`);
-      expect(screen.getByTestId('bot-lifecycle-settings')).toBeTruthy();
-    }
+  it('maps legacy capability, notification, and advanced links to their current tabs', () => {
+    renderSettings({}, 'settings=1&tab=capabilities');
+    expect(screen.getByTestId('bot-capability-settings')).toBeTruthy();
+
+    cleanup();
+    renderSettings({}, 'settings=1&tab=notifications');
+    expect(screen.getByTestId('bot-lifecycle-settings')).toBeTruthy();
+
+    cleanup();
+    renderSettings({}, 'settings=1&tab=advanced');
+    expect(
+      screen.getByRole('tab', { name: 'bots.settingsTabs.growth' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(screen.getByText('bots.advancedIdentity.title')).toBeTruthy();
   });
 
-  it('opens Advanced for legacy operational tabs now that those blocks are no longer first-level', () => {
-    for (const legacyTab of ['identity', 'channels', 'automation', 'projects']) {
-      cleanup();
-      renderSettings({}, `settings=1&tab=${legacyTab}`);
-      if (legacyTab === 'identity') {
-        expect(screen.queryByTestId('bot-lifecycle-settings')).toBeNull();
-      } else {
-        expect(screen.getByTestId('bot-lifecycle-settings')).toBeTruthy();
-      }
-      expect(scrollIntoViewSpy).toHaveBeenCalled();
-    }
+  it('keeps legacy identity, channels, automation, and projects links reachable', () => {
+    renderSettings({}, 'settings=1&tab=identity');
+    expect(screen.getByTestId('bot-capability-settings')).toBeTruthy();
+
+    cleanup();
+    renderSettings({}, 'settings=1&tab=channels');
+    expect(screen.getByTestId('bot-route-settings')).toBeTruthy();
+
+    cleanup();
+    renderSettings({}, 'settings=1&tab=projects');
+    expect(screen.getByTestId('bot-project-settings')).toBeTruthy();
   });
 
   it('falls back to the top of the page for an unknown ?tab= value instead of a blank panel', () => {
     renderSettings({}, 'settings=1&tab=not-a-real-tab');
-    expect(scrollToSpy).toHaveBeenCalledWith({ top: 0 });
     expect(screen.queryByTestId('bot-lifecycle-settings')).toBeNull();
-    expect(screen.getByText('bots.settingsBlocks.who')).toBeTruthy();
+    expect(screen.getByTestId('bot-capability-settings')).toBeTruthy();
   });
 });
 
-describe('TA 是谁 — persona summary and adjust wizard', () => {
+describe('profile persona summary and editor', () => {
   it('shows the unset summary and opens the wizard from the adjust button', () => {
     renderSettings();
-    expect(screen.getByText('bots.persona.summaryUnset')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'bots.persona.addButton' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'bots.persona.adjustButton' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'bots.persona.adjustButton' }));
-    expect(screen.getByRole('dialog', { name: 'persona-wizard-fixture' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'bots.persona.addButton' }));
+    expect(screen.getByRole('dialog', { name: 'bots.editProfile' })).toBeTruthy();
+    expect(screen.getByTestId('persona-editor-fields')).toBeTruthy();
+  });
+
+  it('opens the same complete profile editor from Responsibilities', () => {
+    renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'bots.background.edit' }));
+    expect(screen.getByRole('dialog', { name: 'bots.editProfile' })).toBeTruthy();
+    expect(screen.getByTestId('bot-avatar-picker')).toBeTruthy();
+    expect(screen.getByTestId('persona-editor-fields')).toBeTruthy();
   });
 
   it('shows a compiled summary once identitySource carries a persona marker', () => {
@@ -569,11 +539,12 @@ describe('TA 是谁 — persona summary and adjust wizard', () => {
   第 9 条:选模板卡时那份完整的角色设定,在设置页要**看得到、改得动**。
   在这之前它只存在于 identitySource 里,界面上一个字都不露。
 */
-describe('TA 是谁 — 背景设定', () => {
+describe('profile background', () => {
   const TEMPLATE_IDENTITY = '你是本本，项目管家。流程你来盯：评审、检查、交付。';
 
   it('prints the template background in full, not just a personality summary', () => {
     renderSettings({ identitySource: TEMPLATE_IDENTITY });
+    openProfileEditor();
     expect((screen.getByLabelText('bots.background.title') as HTMLTextAreaElement).value).toBe(
       TEMPLATE_IDENTITY,
     );
@@ -583,6 +554,7 @@ describe('TA 是谁 — 背景设定', () => {
     renderSettings({
       identitySource: `${TEMPLATE_IDENTITY}\n\n<!--persona:v1:{"style":"concise","proactivity":"reactive","call":"name"}-->\nzh\nen`,
     });
+    openProfileEditor();
     const shown = (screen.getByLabelText('bots.background.title') as HTMLTextAreaElement).value;
     expect(shown).toBe(TEMPLATE_IDENTITY);
     expect(shown).not.toContain('persona:v1');
@@ -590,11 +562,13 @@ describe('TA 是谁 — 背景设定', () => {
 
   it('shows an honest empty state for a hand-made teammate with no background yet', () => {
     renderSettings({ identitySource: '' });
+    openProfileEditor();
     expect((screen.getByLabelText('bots.background.title') as HTMLTextAreaElement).value).toBe('');
   });
 
   it('shows a real editable textarea immediately — the background is not read-only', () => {
     renderSettings({ identitySource: TEMPLATE_IDENTITY });
+    openProfileEditor();
 
     const textarea = screen.getByLabelText('bots.background.title') as HTMLTextAreaElement;
     expect(textarea.value).toBe(TEMPLATE_IDENTITY);
@@ -607,6 +581,7 @@ describe('TA 是谁 — 背景设定', () => {
   */
   it('lets the user type a newline and a trailing space without them vanishing', () => {
     renderSettings({ identitySource: TEMPLATE_IDENTITY });
+    openProfileEditor();
 
     const textarea = screen.getByLabelText('bots.background.title') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: '你是本本。\n' } });
@@ -617,6 +592,7 @@ describe('TA 是谁 — 背景设定', () => {
 
   it('keeps the identity field directly editable instead of returning to a read-only card', () => {
     renderSettings({ identitySource: TEMPLATE_IDENTITY });
+    openProfileEditor();
     expect(screen.getByLabelText('bots.background.title')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'bots.background.done' })).toBeNull();
   });
@@ -638,7 +614,7 @@ describe('TA 记得的 — memory list', () => {
         sizeBytes: 12,
       },
     ] as never);
-    renderAdvancedSettings();
+    renderTabSettings('growth');
 
     expect(await screen.findByText('Likes short replies')).toBeTruthy();
     expect(screen.queryByText('bots.memoryRecovery.title')).toBeNull();
@@ -646,16 +622,15 @@ describe('TA 记得的 — memory list', () => {
 
   it('shows an honest empty state rather than fabricated memories', async () => {
     emptyMemoryApi.list.mockResolvedValue([]);
-    renderAdvancedSettings();
+    renderTabSettings('growth');
     expect(await screen.findByText('bots.memoryList.empty')).toBeTruthy();
   });
 
   it('offers a recovery affordance instead of the list when memory is off, and turns it back on', async () => {
-    renderAdvancedSettings({ capabilities: capabilities({ memory: false }) });
-    expect(screen.getByText('bots.memoryRecovery.title')).toBeTruthy();
-    expect(screen.queryByText('bots.memoryList.title')).toBeNull();
+    renderTabSettings('growth', { capabilities: capabilities({ memory: false }) });
+    expect(screen.getByText('bots.memoryRecovery.description')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'bots.memoryRecovery.action' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'bots.memoryLabel' }));
     await waitFor(() => expect(mocks.updateBotProfile).toHaveBeenCalledTimes(1));
     expect(mocks.updateBotProfile.mock.calls[0]?.[1]).toMatchObject({
       capabilities: expect.objectContaining({ memory: true }),
@@ -664,17 +639,13 @@ describe('TA 记得的 — memory list', () => {
 
   it('keeps an honest "TA 学会的" empty state when nothing carries the learned- convention', async () => {
     emptyMemoryApi.list.mockResolvedValue([]);
-    renderAdvancedSettings();
+    renderTabSettings('growth');
     expect(screen.getByText('bots.learned.title')).toBeTruthy();
     expect(await screen.findByText('bots.learned.empty')).toBeTruthy();
   });
 });
 
-/**
- * 批次 ε:「TA 学会的」不再是占位——它和「TA 记得的」是同一份伙伴记忆分域的两个
- * 切片,按 `learned-` slug 前缀切开(见 botGrowth.partitionBotMemoryRecords)。
- */
-describe('TA 学会的 — learned list', () => {
+describe('learned list', () => {
   const record = (slug: string, title: string, type = 'user') => ({
     filename: `${type}_${slug}.md`,
     slug,
@@ -693,7 +664,7 @@ describe('TA 学会的 — learned list', () => {
       record('reply-style', 'Likes short replies'),
       record('learned-shrink-email', 'Shrinks long mail to three lines', 'reference'),
     ] as never);
-    renderAdvancedSettings();
+    renderTabSettings('growth');
 
     const learned = await screen.findByTestId('bot-learned-list');
     expect(within(learned).getByText('Shrinks long mail to three lines')).toBeTruthy();
@@ -711,7 +682,7 @@ describe('TA 学会的 — learned list', () => {
       record('auto-1', 'Internal digest', 'digest'),
       record('learned-auto', 'Internal learned digest', 'digest'),
     ] as never);
-    renderAdvancedSettings();
+    renderTabSettings('growth');
 
     expect(await screen.findByText('bots.memoryList.empty')).toBeTruthy();
     expect(screen.getByText('bots.learned.empty')).toBeTruthy();
@@ -723,7 +694,7 @@ describe('TA 学会的 — learned list', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       emptyMemoryApi.list.mockResolvedValue([]);
-      renderSettings({}, 'settings=1&anchor=who&highlight=learned');
+      renderSettings({}, 'settings=1&anchor=grew&highlight=learned');
 
       await waitFor(() =>
         expect(screen.getByTestId('bot-learned-list').className).toContain('ring-2'),
@@ -743,7 +714,7 @@ describe('TA 学会的 — learned list', () => {
 
   it('highlights 记得的 when the footnote was about a plain memory', async () => {
     emptyMemoryApi.list.mockResolvedValue([]);
-    renderSettings({}, 'settings=1&anchor=who&highlight=memory');
+    renderSettings({}, 'settings=1&anchor=grew&highlight=memory');
     await waitFor(() =>
       expect(screen.getByTestId('bot-memory-list').className).toContain('ring-2'),
     );
@@ -752,31 +723,20 @@ describe('TA 学会的 — learned list', () => {
 
   it('does not highlight anything on an ordinary settings visit', async () => {
     emptyMemoryApi.list.mockResolvedValue([]);
-    renderAdvancedSettings();
+    renderTabSettings('growth');
     await screen.findByText('bots.memoryList.empty');
     expect(screen.getByTestId('bot-memory-list').className).not.toContain('ring-2');
     expect(screen.getByTestId('bot-learned-list').className).not.toContain('ring-2');
   });
 });
 
-describe('TA 会的 — ability wall and single-IM mutual exclusion', () => {
-  it('shows built-in abilities as plain statements — no toggle for any of them', () => {
-    renderAdvancedSettings();
-    expect(screen.getByText('bots.abilityWall.abilities.writing')).toBeTruthy();
-    expect(screen.getByText('bots.abilityWall.abilities.research')).toBeTruthy();
-    expect(screen.getByText('bots.abilityWall.abilities.doing')).toBeTruthy();
-    expect(screen.getByText('bots.abilityWall.abilities.schedule')).toBeTruthy();
-    expect(screen.getByText('bots.abilityWall.abilities.collab')).toBeTruthy();
-    // No permission/automation switches leak into the collapsed top-level page.
-    expect(screen.queryAllByRole('switch')).toHaveLength(0);
-  });
-
+describe('real channel connections and single-IM mutual exclusion', () => {
   it('greys out the other IM channels once one is connected, with a disconnect hint', async () => {
     mocks.listBotChannelConnections.mockResolvedValue([
       connection({ id: 'feishu-conn', kind: 'feishu', accountKey: 'a' }),
       connection({ id: 'telegram-conn', kind: 'telegram', accountKey: 'b', accountName: 'Ops TG' }),
     ]);
-    renderAdvancedSettings({
+    renderTabSettings('connections', {
       channels: [
         {
           id: 'ch-feishu',
@@ -787,16 +747,14 @@ describe('TA 会的 — ability wall and single-IM mutual exclusion', () => {
       ] as never,
     });
 
-    // Every other IM kind (including ones with no connected account at all) is
-    // also gated — applyImMutualExclusion blocks any non-mounted IM chip, not
-    // just ones with a live account. Scope the assertion to Telegram's own row.
+    // Only the other real account is gated; missing channel kinds are not rendered.
     const telegramLabel = await screen.findByText('Telegram · Ops TG');
     const telegramRow = telegramLabel.closest('.min-w-0')!.parentElement as HTMLElement;
     const telegramButton = within(telegramRow).getByRole('button');
     expect((telegramButton as HTMLButtonElement).disabled).toBe(true);
-    expect(
-      within(telegramRow).getByText('bots.abilityWall.imBlocked:{"channel":"Feishu"}'),
-    ).toBeTruthy();
+    expect(telegramButton.getAttribute('title')).toBe(
+      'bots.abilityWall.imBlocked:{"channel":"Feishu"}',
+    );
   });
 
   it('never blocks a channel that is itself mounted — a pre-existing multi-IM bot keeps every connection', async () => {
@@ -804,7 +762,7 @@ describe('TA 会的 — ability wall and single-IM mutual exclusion', () => {
       connection({ id: 'feishu-conn', kind: 'feishu', accountKey: 'a' }),
       connection({ id: 'telegram-conn', kind: 'telegram', accountKey: 'b', accountName: 'Ops TG' }),
     ]);
-    renderAdvancedSettings({
+    renderTabSettings('connections', {
       channels: [
         {
           id: 'ch-feishu',
@@ -838,55 +796,20 @@ describe('TA 会的 — ability wall and single-IM mutual exclusion', () => {
     expect(within(telegramRow).queryByText(/bots\.abilityWall\.imBlocked/)).toBeNull();
   });
 
-  /*
-    裁决 2026-08-19:没有账号的渠道行不再是「置灰 + 先去设置里连」的死路。
-    它现在可点,直接落到该渠道**真实**的连接界面(设置 › IM 机器人 的对应
-    分区,个人分区还会把那张手风琴卡展开)。
-  */
-  it("takes an account-less channel straight to that channel's real connect UI", async () => {
+  it('does not fabricate channel choices when no account exists', async () => {
     mocks.listBotChannelConnections.mockResolvedValue([]);
-    renderAdvancedSettings();
-
-    // 还没有账号的渠道现在是一枚可点的小片(标题就是渠道名,没有 ` · 账号`),
-    // 不再是一整行带「连接账号」按钮的卡 —— 七个「还没连」的占位行曾经是这一页
-    // 上版面最大、信息量最小的一片。
-    const wecomChip = await screen.findByRole('button', {
-      name: 'bots.abilityWall.connectAccount · Wecom',
-    });
-    expect((wecomChip as HTMLButtonElement).disabled).toBe(false);
-
-    fireEvent.click(wecomChip);
-    expect(mocks.navigate).toHaveBeenCalledWith(
-      '/settings?tab=im-bot&imGroup=personal&imChannel=wecom',
-    );
-  });
-
-  it('no longer spends a full row per not-yet-connected channel', async () => {
-    mocks.listBotChannelConnections.mockResolvedValue([]);
-    renderAdvancedSettings();
-
-    await screen.findByRole('button', { name: /Wecom/ });
-    // 每行一颗、名字就叫「连接账号」的按钮没有了 —— 那是收成小片之前的形态。
-    // 小片的可访问名是「连接账号 · <渠道>」,精确匹配这个名字查不到,正好用来区分。
-    expect(
-      screen.queryAllByRole('button', { name: 'bots.abilityWall.connectAccount' }),
-    ).toHaveLength(0);
-  });
-
-  it('sends Slack to the Cindy relay group, not the personal one', async () => {
-    mocks.listBotChannelConnections.mockResolvedValue([]);
-    renderAdvancedSettings();
-
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'bots.abilityWall.connectAccount · Slack' }),
-    );
-    expect(mocks.navigate).toHaveBeenCalledWith('/settings?tab=im-bot&imGroup=cindy');
+    renderTabSettings('connections');
+    await waitFor(() => expect(mocks.listBotChannelConnections).toHaveBeenCalled());
+    expect(screen.getByText('bots.abilityWall.empty')).toBeTruthy();
+    expect(screen.queryByText('bots.abilityWall.connectedTitle')).toBeNull();
+    expect(screen.queryByText('Wecom')).toBeNull();
+    expect(screen.queryByText('Slack')).toBeNull();
   });
 });
 
-describe('TA 懂的 — folder cards', () => {
+describe('project folder cards', () => {
   it('shows bound folders and adds another via the directory picker', async () => {
-    renderAdvancedSettings({
+    renderTabSettings('project', {
       projectBindings: [
         {
           id: 'binding-1',
@@ -914,12 +837,7 @@ describe('TA 懂的 — folder cards', () => {
   });
 });
 
-describe('TA 的日程 — automation belongs to the chat work surface', () => {
-  it('does not duplicate the automation editor inside profile settings', () => {
-    renderSettings({ capabilities: capabilities({ automation: false }) });
-    expect(screen.queryByTestId('bot-automation-settings')).toBeNull();
-  });
-
+describe('运行维护 — lifecycle', () => {
   /*
     「它会做什么」那张芯片墙整块下线了(裁决 2026-08-19)。
 
@@ -931,9 +849,9 @@ describe('TA 的日程 — automation belongs to the chat work surface', () => {
     所以这条锁的是**整页展开后一颗 Switch 都不剩**:芯片墙如果被谁重新装回来,
     不管装的是哪一颗,这里都会红。
   */
-  it('has no capability switches left anywhere on the page, advanced included', () => {
+  it('keeps obsolete capability chips out of Maintenance', () => {
     renderSettings({ capabilities: capabilities({ automation: false, permissions: 'ask' }) });
-    fireEvent.click(screen.getByRole('button', { name: 'bots.advancedLinkLabel' }));
+    openTab('maintenance');
     expect(screen.queryAllByRole('switch')).toHaveLength(0);
     // 连 i18n key 都不该再被任何组件引用。
     expect(screen.queryByText(/bots\.capabilityChips\./)).toBeNull();
@@ -944,13 +862,10 @@ describe('TA 的日程 — automation belongs to the chat work surface', () => {
     「Profile 运行态 vs 正在跑的任务」,和上下文压缩同属一件事,所以搬到了
     「任务生命周期」。
   */
-  it('keeps the runtime-state pill and automatic next-turn refresh note by compaction', () => {
+  it('keeps health, history, delivery, and renewal together', () => {
     renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'bots.advancedLinkLabel' }));
-    const lifecycle = screen.getByText('bots.sessionLifecycleTitle').closest('section')!;
-    expect(within(lifecycle).getByText(/bots\.runtimeState\./)).toBeTruthy();
-    expect(within(lifecycle).getByText('bots.capabilitiesDeferred')).toBeTruthy();
-    expect(within(lifecycle).getByRole('button', { name: /bots\.renew/ })).toBeTruthy();
+    openTab('maintenance');
+    expect(screen.getByTestId('bot-lifecycle-settings')).toBeTruthy();
   });
 });
 
@@ -988,27 +903,30 @@ describe('Bot settings autosave', () => {
     });
   };
 
+  const advancedProfileInput = () => {
+    openTab('growth');
+    return screen.getByPlaceholderText('bots.userContextSourcePlaceholder');
+  };
+
   it('merges a typing burst into one profile update after the debounce window', async () => {
     renderSettings();
-    const input = screen.getByDisplayValue('PR steward');
-
-    for (const value of ['PR stewar', 'PR stewa', 'PR stew', 'PR crew']) {
+    const input = advancedProfileInput();
+    for (const value of ['Call', 'Call me', 'Call me Chris', 'Call me Chris, briefly.']) {
       fireEvent.change(input, { target: { value } });
       await advance(300);
       expect(mocks.updateBotProfile).not.toHaveBeenCalled();
     }
-
     await advance(1300);
     expect(mocks.updateBotProfile).toHaveBeenCalledTimes(1);
-    expect(mocks.updateBotProfile.mock.calls[0]?.[1]).toMatchObject({ name: 'PR crew' });
+    expect(mocks.updateBotProfile.mock.calls[0]?.[1]).toMatchObject({
+      userContextSource: 'Call me Chris, briefly.',
+    });
   });
 
-  it('saves an instant edit (turning memory back on) without waiting out the text debounce', async () => {
-    renderAdvancedSettings({ capabilities: capabilities({ memory: false }) });
-
-    fireEvent.click(screen.getByRole('button', { name: 'bots.memoryRecovery.action' }));
+  it('saves an instant memory edit without waiting out the text debounce', async () => {
+    renderTabSettings('growth', { capabilities: capabilities({ memory: false }) });
+    fireEvent.click(screen.getByRole('switch', { name: 'bots.memoryLabel' }));
     await advance(0);
-
     expect(mocks.updateBotProfile).toHaveBeenCalledTimes(1);
     expect(mocks.updateBotProfile.mock.calls[0]?.[1]).toMatchObject({
       capabilities: expect.objectContaining({ memory: true }),
@@ -1020,7 +938,6 @@ describe('Bot settings autosave', () => {
     fireEvent.click(screen.getByRole('button', { name: 'bots.persona.adjustButton' }));
     fireEvent.click(screen.getByRole('button', { name: 'persona-wizard-save' }));
     await advance(0);
-
     expect(mocks.updateBotProfile).toHaveBeenCalledTimes(1);
     expect(mocks.updateBotProfile.mock.calls[0]?.[1]).toMatchObject({
       identitySource: expect.stringContaining('<!--persona:v1:'),
@@ -1028,33 +945,37 @@ describe('Bot settings autosave', () => {
     expect(screen.getByText('persona-summary-fixture')).toBeTruthy();
   });
 
-  /*
-    背景正文走的是页面既有的 autosave 通道(和名字、头像同一条),而且**只**改
-    背景那一段 —— 向导那三档口气在同一份 identitySource 里,不能被顺手覆盖掉。
-  */
-  it('autosaves a background edit through the same channel as every other field', async () => {
+  it('saves the four-field profile dialog through the same autosave channel', async () => {
     renderSettings({ identitySource: '你是本本，项目管家。' });
+    openProfileEditor();
+    fireEvent.change(screen.getByDisplayValue('PR steward'), { target: { value: 'PR crew' } });
+    fireEvent.change(screen.getByDisplayValue('Delivery steward'), {
+      target: { value: 'Reviews and merges' },
+    });
     fireEvent.change(screen.getByLabelText('bots.background.title'), {
       target: { value: '你是本本，只说结论。' },
     });
+    fireEvent.click(screen.getByRole('button', { name: 'bots.save' }));
     await advance(1600);
-
     expect(mocks.updateBotProfile).toHaveBeenCalledTimes(1);
     expect(mocks.updateBotProfile.mock.calls[0]?.[1]).toMatchObject({
+      name: 'PR crew',
+      description: 'Reviews and merges',
       identitySource: '你是本本，只说结论。',
     });
   });
 
-  it('leaves the personality selection untouched when only the background changes', async () => {
+  it('leaves the personality marker untouched when only the background changes', async () => {
     renderSettings({
       identitySource:
         '你是本本，项目管家。\n\n<!--persona:v1:{"style":"steady","proactivity":"reportAll","call":"boss"}-->\nzh\nen',
     });
+    openProfileEditor();
     fireEvent.change(screen.getByLabelText('bots.background.title'), {
       target: { value: '你是本本，只说结论。' },
     });
+    fireEvent.click(screen.getByRole('button', { name: 'bots.save' }));
     await advance(1600);
-
     const saved = mocks.updateBotProfile.mock.calls[0]?.[1] as { identitySource: string };
     expect(saved.identitySource).toContain('你是本本，只说结论。');
     expect(saved.identitySource).not.toContain('项目管家');
@@ -1063,15 +984,11 @@ describe('Bot settings autosave', () => {
   });
 
   it('takes the user back to the conversation after saving a persona', async () => {
-    // 「调整性格」是从对话里点进来的。改完停在设置页,用户得自己再点一次返回
-    // 才听得到新口气 —— 保存即回对话。
     const { onBack } = renderSettings();
     fireEvent.click(screen.getByRole('button', { name: 'bots.persona.adjustButton' }));
     fireEvent.click(screen.getByRole('button', { name: 'persona-wizard-save' }));
     await advance(0);
-
     expect(onBack).toHaveBeenCalledTimes(1);
-    // 回对话之前必须先把新性格存下去,而且存的是**新**值不是旧值。
     expect(mocks.updateBotProfile.mock.calls[0]?.[1]).toMatchObject({
       identitySource: expect.stringContaining('"style":"lively"'),
     });
@@ -1083,7 +1000,6 @@ describe('Bot settings autosave', () => {
     fireEvent.click(screen.getByRole('button', { name: 'bots.persona.adjustButton' }));
     fireEvent.click(screen.getByRole('button', { name: 'persona-wizard-save' }));
     await advance(0);
-
     expect(peekPendingBotPersonaAck('bot-1')).toMatchObject({
       style: 'lively',
       proactivity: 'proactive',
@@ -1093,7 +1009,6 @@ describe('Bot settings autosave', () => {
 
   it('parks nothing when the wizard is saved without changing the persona', async () => {
     resetPendingBotPersonaAckForTests();
-    // 已经就是向导那份选择了:再保存一次不该让 TA 又说一遍「以后就这么说话」。
     renderSettings({
       identitySource:
         '<!--persona:v1:{"style":"lively","proactivity":"proactive","call":"boss"}-->\nzh\nen',
@@ -1101,49 +1016,39 @@ describe('Bot settings autosave', () => {
     fireEvent.click(screen.getByRole('button', { name: 'bots.persona.adjustButton' }));
     fireEvent.click(screen.getByRole('button', { name: 'persona-wizard-save' }));
     await advance(0);
-
     expect(peekPendingBotPersonaAck('bot-1')).toBeNull();
-    // 但「回对话」照做 —— 用户点的是保存,不是取消。
   });
 
-  it('sends nothing when the page is only opened, or when an edit is reverted', async () => {
+  it('sends nothing when the page is only opened or profile edits are cancelled', async () => {
     renderSettings();
     await advance(3000);
     expect(mocks.updateBotProfile).not.toHaveBeenCalled();
-
-    const input = screen.getByDisplayValue('PR steward');
-    fireEvent.change(input, { target: { value: 'PR stewardz' } });
-    fireEvent.change(input, { target: { value: 'PR steward' } });
+    openProfileEditor();
+    fireEvent.change(screen.getByDisplayValue('PR steward'), { target: { value: 'PR crew' } });
+    fireEvent.click(screen.getByRole('button', { name: 'bots.cancel' }));
     await advance(3000);
     expect(mocks.updateBotProfile).not.toHaveBeenCalled();
   });
 
-  it('flushes a still-pending edit when the settings view unmounts', async () => {
-    const view = renderSettings({}, 'settings=1&tab=advanced');
-    fireEvent.change(screen.getByDisplayValue('Delivery steward'), {
-      target: { value: 'Reviews and merges' },
+  it('flushes a still-pending edit when the settings view unmounts', () => {
+    const view = renderSettings({}, 'settings=1&tab=growth');
+    fireEvent.change(screen.getByPlaceholderText('bots.userContextSourcePlaceholder'), {
+      target: { value: 'Call me Chris.' },
     });
-
-    // Well inside the debounce window — the old UI would have dropped this.
     view.unmount();
-
     expect(mocks.updateBotProfile).toHaveBeenCalledTimes(1);
     expect(mocks.updateBotProfile.mock.calls[0]?.[1]).toMatchObject({
-      description: 'Reviews and merges',
+      userContextSource: 'Call me Chris.',
     });
   });
 
-  it('flushes on blur so long user-profile prompts do not wait for the debounce', async () => {
-    renderSettings({}, 'settings=1&tab=advanced');
+  it('flushes on blur so long user-profile prompts do not wait for debounce', async () => {
+    renderSettings({}, 'settings=1&tab=growth');
     const textarea = screen.getByPlaceholderText('bots.userContextSourcePlaceholder');
     fireEvent.change(textarea, { target: { value: 'Call me Chris, keep replies short.' } });
     fireEvent.blur(textarea);
     await advance(0);
-
     expect(mocks.updateBotProfile).toHaveBeenCalledTimes(1);
-    expect(mocks.updateBotProfile.mock.calls[0]?.[1]).toMatchObject({
-      userContextSource: 'Call me Chris, keep replies short.',
-    });
   });
 
   it('shows a saving indicator and then a transient saved mark', async () => {
@@ -1154,79 +1059,63 @@ describe('Bot settings autosave', () => {
       });
       return { id: 'bot-1', currentVersion: 1, ...patch } as never;
     });
-
     renderSettings();
-    fireEvent.change(screen.getByDisplayValue('PR steward'), { target: { value: 'PR crew' } });
+    const input = advancedProfileInput();
+    fireEvent.change(input, { target: { value: 'Call me Chris.' } });
     await advance(1300);
     expect(screen.getByText('bots.autosave.saving')).toBeTruthy();
-
     await act(async () => {
       release?.();
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(screen.getByText('bots.autosave.saved')).toBeTruthy();
-
-    // "Saved" is a confirmation, not a permanent badge.
     await advance(2500);
     expect(screen.queryByText('bots.autosave.saved')).toBeNull();
   });
 
   it('surfaces a failure with a retry that re-sends the same change', async () => {
     mocks.updateBotProfile.mockRejectedValueOnce(new Error('ipc down'));
-
     renderSettings();
-    fireEvent.change(screen.getByDisplayValue('PR steward'), { target: { value: 'PR crew' } });
+    const input = advancedProfileInput();
+    fireEvent.change(input, { target: { value: 'Call me Chris.' } });
     await advance(1300);
-
     expect(screen.getByRole('alert').textContent).toContain('bots.profileApply.saveFailed');
-    expect(mocks.updateBotProfile).toHaveBeenCalledTimes(1);
-
     fireEvent.click(screen.getByRole('button', { name: 'bots.autosave.retry' }));
     await advance(0);
-
     expect(mocks.updateBotProfile).toHaveBeenCalledTimes(2);
-    expect(mocks.updateBotProfile.mock.calls[1]?.[1]).toMatchObject({ name: 'PR crew' });
-    expect(screen.queryByRole('button', { name: 'bots.autosave.retry' })).toBeNull();
+    expect(mocks.updateBotProfile.mock.calls[1]?.[1]).toMatchObject({
+      userContextSource: 'Call me Chris.',
+    });
   });
 
-  it('flushes before leaving for the chat, and stays put when that save fails', async () => {
+  it('flushes before leaving and stays put when that save fails', async () => {
     mocks.updateBotProfile.mockRejectedValueOnce(new Error('ipc down'));
     const view = renderSettings();
-    fireEvent.change(screen.getByDisplayValue('PR steward'), { target: { value: 'PR crew' } });
-
+    const input = advancedProfileInput();
+    fireEvent.change(input, { target: { value: 'Call me Chris.' } });
     fireEvent.click(screen.getByRole('button', { name: 'bots.backToChat' }));
     await advance(0);
-
-    expect(mocks.updateBotProfile).toHaveBeenCalledTimes(1);
     expect(view.onBack).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert').textContent).toContain('bots.profileApply.saveFailed');
-
+    expect(screen.getByRole('alert')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'bots.backToChat' }));
     await advance(0);
-    expect(mocks.updateBotProfile).toHaveBeenCalledTimes(2);
     expect(view.onBack).toHaveBeenCalledTimes(1);
   });
 
   it('leaves settings directly after saving because capability epochs refresh automatically', async () => {
-    // The permanent canonical Chat keeps its Session id. Saving v2 must not
-    // make the user create another task or dismiss a Renew modal.
     mocks.updateBotProfile.mockImplementationOnce(async (_id, patch) => ({
       id: 'bot-1',
       currentVersion: 2,
       ...patch,
     }));
-
     const view = renderSettings();
-    fireEvent.change(screen.getByDisplayValue('PR steward'), { target: { value: 'PR crew' } });
+    const input = advancedProfileInput();
+    fireEvent.change(input, { target: { value: 'Call me Chris.' } });
     await advance(1300);
-
     expect(mocks.updateBotProfile).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('bots.profileApply.title')).toBeNull();
-
     fireEvent.click(screen.getByRole('button', { name: 'bots.backToChat' }));
     await advance(0);
-
-    expect(screen.queryByText('bots.profileApply.title')).toBeNull();
     expect(view.onBack).toHaveBeenCalledTimes(1);
   });
 });

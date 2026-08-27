@@ -4,7 +4,6 @@ import {
   applyImMutualExclusion,
   botChannelDisplayName,
   buildBotChannelChips,
-  MOUNTABLE_BOT_CHANNEL_KINDS,
 } from '../botChannelChips';
 import type { BotChannelConnection } from '../botStore';
 
@@ -25,19 +24,11 @@ function connection(overrides: Partial<BotChannelConnection> = {}): BotChannelCo
 }
 
 describe('capability wall channel chips', () => {
-  it('gives every mountable channel a chip, even with nothing connected', () => {
-    const chips = buildBotChannelChips([], () => false);
-
-    expect(chips.map((chip) => chip.kind)).toEqual([...MOUNTABLE_BOT_CHANNEL_KINDS]);
-    // 未连接账号的渠道芯片是死的:用户点不动它,只能先去设置里连账号。
-    for (const chip of chips) {
-      expect(chip.connection).toBeNull();
-      expect(chip.disabled).toBe(true);
-      expect(chip.mounted).toBe(false);
-    }
+  it('returns no chip when the runtime reports no connection', () => {
+    expect(buildBotChannelChips([], () => false)).toEqual([]);
   });
 
-  it('replaces the placeholder with a real, flippable chip once an account exists', () => {
+  it('maps a real account to one flippable chip', () => {
     const feishu = connection();
     const chips = buildBotChannelChips([feishu], (item) => item.id === 'conn-1');
 
@@ -48,11 +39,7 @@ describe('capability wall channel chips', () => {
       mounted: true,
       disabled: false,
     });
-    // 只有该 kind 的占位被顶掉,其余渠道仍然各有一个置灰芯片。
-    expect(chips).toHaveLength(MOUNTABLE_BOT_CHANNEL_KINDS.length);
-    expect(chips.filter((item) => item.connection === null)).toHaveLength(
-      MOUNTABLE_BOT_CHANNEL_KINDS.length - 1,
-    );
+    expect(chips).toHaveLength(1);
   });
 
   it('keeps a non-routable account visible but not flippable', () => {
@@ -111,21 +98,21 @@ describe('single-IM mutual exclusion', () => {
 
     expect(gated.find((chip) => chip.kind === 'feishu')?.blockedByImKind).toBeNull();
     expect(gated.find((chip) => chip.kind === 'telegram')?.blockedByImKind).toBeNull();
-    // A third, unconnected IM kind is still gated by one of the two live ones.
-    expect(gated.find((chip) => chip.kind === 'slack')?.blockedByImKind).toBeTruthy();
+    expect(gated).toHaveLength(2);
   });
 
-  it('does not gate non-IM or non-mountable chips', () => {
-    const feishu = connection({ kind: 'feishu' });
-    const chips = buildBotChannelChips([feishu], (item) => item.id === 'conn-1');
-    const gated = applyImMutualExclusion(chips);
-    // 'x' is not in MOUNTABLE_BOT_CHANNEL_KINDS and never appears as a chip here,
-    // so this simply guards that every produced chip kind is IM-relevant only
-    // when actually gated.
-    for (const chip of gated) {
-      if (chip.blockedByImKind) {
-        expect(MOUNTABLE_BOT_CHANNEL_KINDS).toContain(chip.kind);
-      }
-    }
+  it('does not use non-IM channels as blockers or block them behind an IM mount', () => {
+    const x = connection({ id: 'x', kind: 'x', accountKey: 'x' });
+    const feishu = connection({ id: 'im', kind: 'feishu', accountKey: 'im' });
+
+    const xMounted = applyImMutualExclusion(
+      buildBotChannelChips([x, feishu], (item) => item.id === 'x'),
+    );
+    expect(xMounted.every((chip) => chip.blockedByImKind == null)).toBe(true);
+
+    const imMounted = applyImMutualExclusion(
+      buildBotChannelChips([x, feishu], (item) => item.id === 'im'),
+    );
+    expect(imMounted.find((chip) => chip.kind === 'x')?.blockedByImKind).toBeNull();
   });
 });

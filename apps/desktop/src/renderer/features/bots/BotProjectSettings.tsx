@@ -3,6 +3,7 @@ import { Archive, FolderGit2, FolderOpen, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { extractIpcError } from '@/utils/ipcError';
+import { BotSettingsBlock } from './BotSettingsBlock';
 
 import {
   archiveBotProjectBinding,
@@ -12,13 +13,17 @@ import {
   type BotProjectBinding,
   type BotWorkspaceLease,
 } from './botStore';
-import {
-  BOT_WORKSPACE_POLICIES,
-  type BotWorkspacePolicy,
-} from '../../../shared/botWorkspace';
+import { BOT_WORKSPACE_POLICIES, type BotWorkspacePolicy } from '../../../shared/botWorkspace';
 
 function splitAllowedPaths(value: string): string[] {
-  return [...new Set(value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      value
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function bindingErrorKey(error: unknown): string {
@@ -285,15 +290,11 @@ export function BotProjectSettings({ bot }: { bot: BotProfile }) {
   };
 
   return (
-    <section className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5">
-      <div className="flex items-center gap-2 text-14 font-medium text-[var(--text-primary)]">
-        <FolderGit2 size={16} />
-        {t('bots.projects.title')}
-      </div>
-      <p className="mt-1 text-12 leading-5 text-[var(--text-secondary)]">
-        {t('bots.projects.description')}
-      </p>
-
+    <BotSettingsBlock
+      icon={FolderGit2}
+      title={t('bots.projects.title')}
+      hint={t('bots.projects.description')}
+    >
       {activeBindings.length > 0 ? (
         <div className="mt-4 flex flex-col gap-3">
           {activeBindings.map((binding) => (
@@ -380,6 +381,6 @@ export function BotProjectSettings({ bot }: { bot: BotProfile }) {
           </button>
         </div>
       </div>
-    </section>
+    </BotSettingsBlock>
   );
 }

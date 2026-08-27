@@ -21,6 +21,7 @@ import {
 } from '../../../shared/botSessionEvents';
 import type { BotProfile } from './botStore';
 import { Switch } from '@/components/ui/switch';
+import { BotSettingsBlock } from './BotSettingsBlock';
 
 const CONTROL_SUBSCRIPTION_PREFIX = 'bot-control-events:';
 
@@ -108,34 +109,25 @@ export function BotEventInboxSettings({ bot }: { bot: BotProfile }) {
   };
 
   return (
-    <section className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-14 font-medium text-[var(--text-primary)]">
-            <BellRing size={16} />
-            {t('bots.inbox.title')}
-          </div>
-          <p className="mt-1 max-w-2xl text-12 leading-5 text-[var(--text-secondary)]">
-            {t('bots.inbox.description')}
-          </p>
-        </div>
-        {/* 非 active 状态不允许改订阅，但历史事件仍可读。 */}
-        {bot.status === 'active' ? (
-          <label className="flex shrink-0 items-center gap-2 text-12 text-[var(--text-secondary)]">
-            <Switch
-              checked={watching}
-              disabled={saving}
-              onCheckedChange={(next) => void setWatching(next)}
-              aria-label={t('bots.inbox.watchTaskStates')}
-            />
-            {saving ? t('bots.inbox.saving') : t('bots.inbox.watchTaskStates')}
-          </label>
+    <BotSettingsBlock
+      icon={BellRing}
+      title={t('bots.inbox.title')}
+      hint={t('bots.inbox.description')}
+      action={
+        bot.status === 'active' ? (
+          <Switch
+            checked={watching}
+            disabled={saving}
+            onCheckedChange={(next) => void setWatching(next)}
+            aria-label={t('bots.inbox.watchTaskStates')}
+          />
         ) : (
           <p className="max-w-xs shrink-0 text-11 leading-5 text-[var(--text-tertiary)]">
             {t('bots.inbox.stoppedNote')}
           </p>
-        )}
-      </div>
+        )
+      }
+    >
 
       {/* Three zeroes are noise before anything has arrived — the counts only
           appear once there is something to count. */}
@@ -258,6 +250,6 @@ export function BotEventInboxSettings({ bot }: { bot: BotProfile }) {
           })}
         </div>
       )}
-    </section>
+    </BotSettingsBlock>
   );
 }

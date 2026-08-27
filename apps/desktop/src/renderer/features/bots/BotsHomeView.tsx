@@ -1,23 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
-  ArrowLeft,
   BookMarked,
+  Blocks,
   Bot,
   Check,
-  ChevronDown,
-  ChevronUp,
+  ChevronRight,
   Download,
   FolderGit2,
+  MessageCircle,
+  MessageCircleMore,
+  Pencil,
+  PlugZap,
   RefreshCcw,
-  Settings2,
-  Sparkles,
+  Users,
   UserRound,
 } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BotPronounProvider, useBotTranslation } from './botPronounContext';
 
 import { Spinner } from '@/components/ui/spinner';
+import { Switch } from '@/components/ui/switch';
 import * as sessionService from '@/lib/sessionService';
 import { ModelSelector } from '@/components/new-chat/ModelSelector';
 import { VendorSegmentedSwitcher } from '@/components/new-chat/VendorSegmentedSwitcher';
@@ -25,6 +28,7 @@ import { useAvailableAgents } from '@/hooks/useAvailableAgents';
 import { getDraft } from '@/state/newMakerDraft';
 import type { MakerVendor } from '@/lib/ccAgent.types';
 import type { ConversationSearchJump } from '../../../shared/conversationSearchJump';
+import { cn } from '@/lib/utils';
 import { useRegisterContentHeader } from '../feature-context';
 import {
   applyBotImMigration,
@@ -36,10 +40,8 @@ import {
   setCanonicalBotSession,
   updateBotProfile,
   upsertBotChannel,
-  refreshBotProfiles,
   useBotProfiles,
   defaultBotModel,
-  getEffectiveBotModelSettings,
   exportBotBundle,
   importBotBundle,
   type BotCapabilities,
@@ -50,7 +52,8 @@ import {
   type BotProfile,
 } from './botStore';
 import { BotRosterView } from './BotRosterView';
-import { BotAvatar, BotAvatarPicker } from './BotAvatar';
+import { BotAvatar } from './BotAvatar';
+import { BotProfileDialog } from './BotProfileDialog';
 import { BotCapabilitySettings } from './BotCapabilitySettings';
 import { BotProjectSettings } from './BotProjectSettings';
 import {
@@ -62,33 +65,46 @@ import { BotRouteSettings } from './BotRouteSettings';
 import { BotLifecycleSettings } from './BotLifecycleSettings';
 import { BotEventInboxSettings } from './BotEventInboxSettings';
 import { BotAbilityWall } from './BotAbilityWall';
-import { botChannelConnectPath } from './botChannelConnectRoutes';
 import { BotFolderCards } from './BotFolderCards';
 import { BotGrowthLists } from './BotGrowthLists';
-import {
-  BotSettingsBlock,
-  BotSettingsBlockHeading,
-  BOT_SETTINGS_BLOCK_CLASS,
-} from './BotSettingsBlock';
+import { BotSettingsBlock } from './BotSettingsBlock';
 import { botTemplateForName, botTemplateSeedEntries } from './botTemplates';
 import { BotPersonaWizard, personaSummaryText } from './BotPersonaWizard';
-import {
-  extractPersonaFromIdentitySource,
-  readBotBackground,
-  writeBotBackground,
-} from './botPersona';
+import { extractPersonaFromIdentitySource, readBotBackground } from './botPersona';
 import { rememberPendingBotPersonaAck } from './botPersonaAck';
-import {
-  resolveBotSettingsAnchor,
-  resolveBotSettingsHighlight,
-  type BotSettingsAnchorId,
-  type BotSettingsHighlightId,
-} from './botSettingsNav';
+import { resolveBotSettingsHighlight, type BotSettingsHighlightId } from './botSettingsNav';
 import type { BotSettingsPayload } from './botSettingsAutosave';
 import { useBotSettingsAutosave } from './useBotSettingsAutosave';
 
 /** 成长尾注跳转后的高亮停留时长。 */
 const BOT_SETTINGS_HIGHLIGHT_MS = 2400;
+
+const BOT_DETAIL_TABS = [
+  { id: 'connections', labelKey: 'bots.settingsTabs.connections', icon: Blocks },
+  { id: 'growth', labelKey: 'bots.settingsTabs.growth', icon: BookMarked },
+  { id: 'model', labelKey: 'bots.settingsTabs.model', icon: PlugZap },
+  { id: 'project', labelKey: 'bots.settingsTabs.project', icon: FolderGit2 },
+  { id: 'maintenance', labelKey: 'bots.settingsTabs.maintenance', icon: RefreshCcw },
+] as const;
+
+type BotDetailTabId = (typeof BOT_DETAIL_TABS)[number]['id'];
+
+function parseBotDetailTab(value: string | null): BotDetailTabId {
+  if (BOT_DETAIL_TABS.some((tab) => tab.id === value)) return value as BotDetailTabId;
+  if (value === 'identity' || value === 'who' || value === 'capabilities') return 'connections';
+  if (value === 'channels' || value === 'can') return 'connections';
+  if (value === 'projects' || value === 'understand') return 'project';
+  if (value === 'grew' || value === 'knowledge' || value === 'advanced') return 'growth';
+  if (
+    value === 'automation' ||
+    value === 'notifications' ||
+    value === 'schedule' ||
+    value === 'runtime'
+  ) {
+    return 'maintenance';
+  }
+  return 'connections';
+}
 
 function channelLabel(channel: BotChannel): string {
   return channel === 'local' ? 'Local Bot' : channel[0].toUpperCase() + channel.slice(1);
@@ -123,29 +139,16 @@ export function BotSettings({
   onBack,
   onRenew,
   onOpenSession,
-  renewing,
 }: {
   bot: BotProfile;
   onBack: () => void;
   onRenew: () => Promise<boolean>;
   onOpenSession: (sessionId: string, searchJump?: ConversationSearchJump) => void;
-  renewing: boolean;
 }) {
   const { t } = useBotTranslation();
   const navigate = useNavigate();
   const [settingsSearchParams] = useSearchParams();
-  // 批次 β:7 tab 收成一页,`?tab=<id>` 深链变成"滚到某个区块",不再是"切换到某个
-  // 面板"。旧 `?settings=1&tab=<value>` 书签仍要落到合理位置——`resolveBotSettingsAnchor`
-  // 把旧 7 个 tab id 与新 5 个锚点都映射到同一套结果,未知/缺省值一律回落到页顶(`null`)。
-  const anchor = useMemo(
-    () =>
-      resolveBotSettingsAnchor(
-        settingsSearchParams.get('tab') ?? settingsSearchParams.get('anchor'),
-      ),
-    [settingsSearchParams],
-  );
-  // 批次 ε:从消息气泡的成长尾注跳进来时,除了滚到「TA 是谁」还要指出**是哪一条**
-  // 列表刚长了东西。高亮是一次性的落点提示,几秒后自己退掉——常驻描边会变成噪音。
+  // 成长尾注深链会短暂指出发生变化的列表。
   const requestedHighlight = useMemo(
     () => resolveBotSettingsHighlight(settingsSearchParams.get('highlight')),
     [settingsSearchParams],
@@ -158,41 +161,7 @@ export function BotSettings({
     return () => window.clearTimeout(timer);
   }, [requestedHighlight]);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const anchorRefs = useRef<Record<BotSettingsAnchorId, HTMLElement | null>>({
-    who: null,
-    can: null,
-    understand: null,
-    grew: null,
-    schedule: null,
-    advanced: null,
-  });
-  // "高级" 默认收起;深链指向运营区块，或消息尾注要求高亮记忆/学习记录时，
-  // 必须先自动展开。否则链接虽然滚到了设置页，真正要看的内容仍藏在折叠层里。
-  const [advancedOpen, setAdvancedOpen] = useState(
-    (anchor !== null && anchor !== 'who') || requestedHighlight !== null,
-  );
-  useEffect(() => {
-    if ((anchor !== null && anchor !== 'who') || requestedHighlight !== null) {
-      setAdvancedOpen(true);
-    }
-  }, [anchor, requestedHighlight]);
-  useEffect(() => {
-    if (!anchor) {
-      contentRef.current?.scrollTo({ top: 0 });
-      return;
-    }
-    if (anchor === 'advanced' && !advancedOpen) return; // 等展开状态落定的下一轮再滚
-    anchorRefs.current[anchor]?.scrollIntoView({ block: 'start' });
-  }, [anchor, advancedOpen]);
   const [personaOpen, setPersonaOpen] = useState(false);
-  /**
-   * 「背景设定」子块的编辑缓冲。`null` = 只读态(这块大多数时候是拿来**看**的)。
-   *
-   * 编辑时**不能**直接把 textarea 的 value 接到从 identitySource 投影出来的正文上:
-   * 那条投影会 trim,于是用户敲的行尾空格和刚按下的回车会在下一帧被吃掉,人根本
-   * 换不了行。缓冲区保留原字,写回 Profile 时才归一。
-   */
-  const [backgroundDraft, setBackgroundDraft] = useState<string | null>(null);
   /**
    * 「刚存完性格，等着回对话」的标记。值用时间戳而不是 boolean：连着调两次性格
    * 也各自能触发一次导航（boolean 会因为值没变而不重跑 effect）。
@@ -214,6 +183,10 @@ export function BotSettings({
   const [rollbackRecord, setRollbackRecord] = useState<BotImMigrationRecord | null>(null);
   const [portabilityBusy, setPortabilityBusy] = useState(false);
   const [portabilityNotice, setPortabilityNotice] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<BotDetailTabId>(() =>
+    parseBotDetailTab(settingsSearchParams.get('tab') ?? settingsSearchParams.get('anchor')),
+  );
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
   const { availableVendors, loaded: availableAgentsLoaded } = useAvailableAgents();
   const selectedProject = bot.projectBindings?.find((binding) => binding.isDefault);
   const sshRemote = Boolean(selectedProject?.remoteHostId);
@@ -223,21 +196,6 @@ export function BotSettings({
     return (['cc', 'codex', 'pi'] as const).filter((item) => !availableVendors.has(item));
   }, [availableAgentsLoaded, availableVendors]);
   const canonicalProjection = bot.sessions.find((item) => item.kind === 'chat');
-  const runtimeState =
-    bot.currentVersion !== undefined &&
-    canonicalProjection?.profileVersion !== undefined &&
-    bot.currentVersion > canonicalProjection.profileVersion
-      ? 'pendingRenew'
-      : canonicalProjection?.runtimeSnapshot?.status === 'degraded'
-        ? 'degraded'
-        : canonicalProjection?.runtimeSnapshot?.status === 'failed'
-          ? 'failed'
-          : canonicalProjection?.runtimeSnapshot?.status === 'prepared'
-            ? 'prepared'
-            : canonicalProjection?.runtimeSnapshot?.status === 'applied'
-              ? 'applied'
-              : 'saved';
-
   // 只在切到另一个 Bot 时重灌表单。自动保存下 `bot` 每次落库(以及失败回滚)都会
   // 换一个新对象,若仍按对象身份重灌,用户在提交在途期间敲的字会被服务端快照盖掉,
   // 失败回滚时更会把刚改的内容整批还原 —— 那是比「忘记点保存」更严重的丢字。
@@ -255,16 +213,16 @@ export function BotSettings({
     setAvatarColor(bot.avatarColor);
     setSelectedSkills(bot.skills);
     setCapabilities(bot.capabilities);
-    // 切到另一个伙伴时收回编辑态:上一位的 textarea 停在打开状态,会让人以为
-    // 自己正在改的是刚点开的这一位。
-    setBackgroundDraft(null);
   }, [bot]);
 
-  /*
-    背景正文段。identitySource 是权威,这里只是**投影**:向导那段 marker 被剥掉,
-    剩下的就是「TA 是谁」这块该给用户看的字。写回时 `writeBotBackground` 会把
-    marker 段原样接回去,所以在这里编辑不会碰掉性格设置。
-  */
+  useEffect(() => {
+    setActiveTab(
+      parseBotDetailTab(settingsSearchParams.get('tab') ?? settingsSearchParams.get('anchor')),
+    );
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [settingsSearchParams]);
+
+  // identitySource 是权威；这里仅投影掉向导 marker 后的背景正文。
   const background = readBotBackground(identitySource);
 
   /*
@@ -358,6 +316,29 @@ export function BotSettings({
     });
   };
 
+  const openProfileEditor = () => {
+    setEditProfileOpen(true);
+  };
+
+  const handleExport = async () => {
+    setPortabilityBusy(true);
+    setPortabilityNotice(null);
+    try {
+      const result = await exportBotBundle(bot.id);
+      if (!result.canceled) {
+        setPortabilityNotice(
+          result.redactionCount
+            ? t('bots.portability.exportedRedacted', { count: result.redactionCount })
+            : t('bots.portability.exported'),
+        );
+      }
+    } catch (error) {
+      setPortabilityNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPortabilityBusy(false);
+    }
+  };
+
   /*
     存完性格回对话。放在 effect 里跑，是为了让这一步发生在「新 identitySource 已经
     进了 autosave 载荷 ref」之后 —— 在 onSave 里同步 flush 会保存到旧值。
@@ -367,14 +348,7 @@ export function BotSettings({
     if (personaSavedAt === null) return;
     setPersonaSavedAt(null);
     handleBack();
-    // handleBack 每次渲染都是新函数，挂进依赖会让这个 effect 变成每渲染都跑；
-    // 触发条件只有 personaSavedAt 这一个。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [personaSavedAt]);
-
-  const compactCanonicalChat = () => {
-    void onRenew();
-  };
+  }, [handleBack, personaSavedAt]);
 
   const visibleChannelConnections = useMemo(() => {
     const byKey = new Map<string, BotChannelConnection>();
@@ -508,24 +482,26 @@ export function BotSettings({
     不一致的判据。
   */
   const persona = extractPersonaFromIdentitySource(identitySource);
-  const hasFolder = (bot.projectBindings ?? []).some((binding) => binding.status !== 'archived');
   const joined = botJoinedRelativeKey(bot.createdAt, Date.now());
-  const headerMeta = [description.trim(), joined ? t(joined.key, { n: joined.n }) : '']
-    .filter(Boolean)
-    .join(' · ');
+
+  // 页面里的普通 Back 行已并入顶栏面包屑。保留键盘可达的同语义出口，是为了
+  // 不依赖指针也能离开；保存失败时它仍然只冲刷，不强行丢状态。
+  const backToChatControl = (
+    <button
+      type="button"
+      onClick={handleBack}
+      aria-label={t('bots.backToChat')}
+      className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-10 focus:inline-flex focus:items-center focus:gap-2 focus:rounded-lg focus:bg-[var(--surface)] focus:px-2 focus:py-1.5 focus:text-12 focus:text-[var(--text-secondary)] focus:hover:bg-[var(--surface-hover)] focus:hover:text-[var(--text-primary)]"
+    >
+      {t('bots.backToChat')}
+    </button>
+  );
 
   if (bot.status === 'archived') {
     return (
       <main className="h-full overflow-y-auto bg-[var(--surface)] px-8 py-8" role="main">
         <div className="mx-auto flex max-w-4xl flex-col gap-5">
-          <button
-            type="button"
-            onClick={onBack}
-            className="-ml-2 inline-flex w-fit items-center gap-2 rounded-lg px-2 py-1.5 text-12 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-          >
-            <ArrowLeft size={15} />
-            {t('bots.title')}
-          </button>
+          {backToChatControl}
           <header className="flex items-center gap-3">
             <BotAvatar bot={bot} size="lg" />
             <div>
@@ -545,321 +521,322 @@ export function BotSettings({
     );
   }
   return (
-    <main className="flex h-full flex-col overflow-hidden bg-[var(--surface)]" role="main">
-      {/*
-        页头与下面的卡片列必须共用同一条左边界。页头此前是整宽 px-8、卡片列是
-        mx-auto max-w-3xl —— 窗口一宽，「返回对话 / 头像 / 名字」贴在最左，卡片却
-        居中，两条左边界越拉越远，整页读起来像两栏不相干的东西拼在一起。这里给
-        页头套上与内容区同宽同居中的容器。
-      */}
-      <div className="shrink-0 px-4 pb-4 pt-5 sm:px-8 sm:pb-5 sm:pt-8">
-        <div className="mx-auto w-full max-w-3xl">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="-ml-2 inline-flex w-fit items-center gap-2 rounded-lg px-2 py-1.5 text-12 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-          >
-            <ArrowLeft size={15} />
-            {t('bots.backToChat')}
-          </button>
-          <header className="mt-3 flex items-center gap-3">
-            <BotAvatar bot={{ ...bot, avatar, avatarColor }} size="lg" />
-            <div className="min-w-0">
-              <p className="text-12 font-medium uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
-                {t('bots.settings')}
-              </p>
-              <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h1 className="text-24 font-medium text-[var(--text-primary)]">{bot.name}</h1>
-                {/*
-                产品裁决 2026-08-18:设置页头部不挂「放手做」⚠。伙伴不是一个需要
-                被随时警告的对象;能力与风险在高级能力区说明。
-              */}
-                {/*
-                自动保存的可观测状态。空闲不显示 —— 常驻的「已保存」是噪音,不是信息。
-                失败才落到下一行,并自带重试入口。
-              */}
-                {autosave.status === 'saving' ? (
-                  <span
-                    role="status"
-                    className="inline-flex select-none items-center gap-1.5 text-11 text-[var(--text-tertiary)]"
+    <main
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--surface)]"
+      role="main"
+    >
+      {backToChatControl}
+      <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden px-4 sm:px-6 lg:flex-row lg:px-8">
+        <aside className="mx-auto w-full shrink-0 border-b border-[var(--border-default)] pb-5 lg:mx-0 lg:h-full lg:w-80 lg:border-b-0 lg:pb-0 lg:pr-6">
+          <div className="flex min-w-0 flex-col gap-6 pt-4">
+            <header className="flex min-w-0 flex-row items-start gap-5 lg:flex-col lg:items-start lg:text-left">
+              <div className="group relative shrink-0">
+                <BotAvatar bot={{ ...bot, avatar, avatarColor }} size="lg" />
+                <button
+                  type="button"
+                  onClick={openProfileEditor}
+                  aria-label={t('bots.editProfile')}
+                  className="absolute inset-0 flex items-center justify-center rounded-full bg-[var(--overlay-modal)] text-[var(--text-primary)] opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                >
+                  <Pencil size={18} />
+                </button>
+              </div>
+
+              <div className="flex min-w-0 flex-1 flex-col items-start gap-3">
+                <div className="flex w-full min-w-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={openProfileEditor}
+                    className="min-w-0 truncate rounded-lg px-2 py-1 text-20 font-medium leading-tight text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
                   >
-                    <Spinner size={12} />
-                    {t('bots.autosave.saving')}
-                  </span>
-                ) : autosave.status === 'saved' ? (
-                  <span
-                    role="status"
-                    className="inline-flex select-none animate-fade-in items-center gap-1 text-11 text-[var(--text-tertiary)]"
-                  >
-                    <Check size={12} />
-                    {t('bots.autosave.saved')}
+                    {name}
+                  </button>
+                  {description.trim() ? (
+                    <span
+                      className="max-w-[45%] shrink truncate rounded-full bg-[var(--surface-chip)] px-2 py-0.5 text-11 text-[var(--text-secondary)]"
+                      title={description.trim()}
+                    >
+                      {description.trim()}
+                    </span>
+                  ) : null}
+                </div>
+                {joined ? (
+                  <span className="px-2 text-11 text-[var(--text-tertiary)]">
+                    {t(joined.key, { n: joined.n })}
                   </span>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={openProfileEditor}
+                  aria-label={t('bots.background.edit')}
+                  className="w-full rounded-lg px-2 py-1 text-left hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                >
+                  <span className="block text-16 font-medium leading-[1.2] text-[var(--settings-section-title)]">
+                    {t('bots.background.title')}
+                  </span>
+                  <span
+                    className="mt-2 block line-clamp-5 text-12 leading-5 text-[var(--text-primary)]"
+                    title={background || t('bots.background.empty')}
+                  >
+                    {background || t('bots.background.empty')}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openProfileEditor}
+                  aria-label={persona ? t('bots.persona.title') : t('bots.persona.addButton')}
+                  className="w-full rounded-lg px-2 py-1 text-left hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                >
+                  <span className="block text-16 font-medium leading-[1.2] text-[var(--settings-section-title)]">
+                    {t('bots.persona.title')}
+                  </span>
+                  {persona ? (
+                    <span
+                      className="mt-2 block line-clamp-5 text-12 leading-5 text-[var(--text-primary)]"
+                      title={personaSummaryText(t, persona)}
+                    >
+                      {personaSummaryText(t, persona)}
+                    </span>
+                  ) : (
+                    <span className="mt-2 block text-12 text-[var(--text-tertiary)]">
+                      {t('bots.persona.addButton')}
+                    </span>
+                  )}
+                </button>
               </div>
-              {/*
-              「{TA 的定位} · 今天加入」。这一行不解释功能,它回答的是「这是谁、跟了
-              我多久」——设置页顶上除了名字之外唯一该说的话。定位优先用用户自己写的
-              描述,没有就退回到这个伙伴擅长什么(描述是可空字段,不为它造一句)。
-            */}
-              {headerMeta ? (
-                <p className="mt-1 text-12 leading-5 text-[var(--text-tertiary)]">{headerMeta}</p>
+            </header>
+
+            <div className="flex w-full flex-col gap-2">
+              <button
+                type="button"
+                disabled={!canonicalProjection}
+                onClick={() => canonicalProjection && onOpenSession(canonicalProjection.id)}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent-cta-bg)] px-4 text-13 font-medium text-[var(--accent-pure-cta-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <MessageCircle size={15} />
+                {t('bots.actions.message')}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/bots/groups')}
+                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] px-4 text-12 text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+              >
+                <Users size={14} />
+                {t('bots.actions.addToGroup')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPersonaOpen(true)}
+                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[var(--border-default)] px-4 text-12 text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+              >
+                {t('bots.persona.adjustButton')}
+              </button>
+            </div>
+
+            <div className="flex min-h-4 flex-wrap items-center gap-2">
+              {autosave.status === 'saving' ? (
+                <span
+                  role="status"
+                  className="inline-flex items-center gap-1 text-11 text-[var(--text-tertiary)]"
+                >
+                  <Spinner size={12} />
+                  {t('bots.autosave.saving')}
+                </span>
+              ) : null}
+              {autosave.status === 'saved' ? (
+                <span
+                  role="status"
+                  className="inline-flex animate-fade-in items-center gap-1 text-11 text-[var(--text-tertiary)]"
+                >
+                  <Check size={12} />
+                  {t('bots.autosave.saved')}
+                </span>
               ) : null}
               {autosave.status === 'error' ? (
                 <p
-                  className="mt-1 flex flex-wrap items-center gap-2 text-11 text-[var(--text-danger)]"
+                  className="flex flex-wrap items-center gap-2 text-11 text-[var(--text-danger)]"
                   role="alert"
                 >
                   {t('bots.profileApply.saveFailed')}
                   <button
                     type="button"
                     onClick={() => void autosave.retry()}
-                    className="rounded-lg px-1.5 py-0.5 text-11 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                    className="rounded-lg px-1.5 py-0.5 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
                   >
                     {t('bots.autosave.retry')}
                   </button>
                 </p>
               ) : null}
             </div>
-          </header>
-        </div>
-      </div>
+          </div>
+        </aside>
 
-      <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-6">
-        <div className="mx-auto flex max-w-3xl flex-col gap-5 pb-10">
-          {/* 高频资料只回答三件事：它是谁、负责什么、怎样协作。 */}
-          <BotSettingsBlock
-            icon={UserRound}
-            title={t('bots.settingsBlocks.who')}
-            hint={t('bots.settingsBlocks.whoDescription')}
-            blockRef={(el) => {
-              anchorRefs.current.who = el;
-            }}
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col pt-4 lg:border-l lg:border-[var(--border-default)] lg:pl-6">
+          <div
+            className="flex max-w-full shrink-0 items-end gap-6 overflow-x-auto border-b border-[var(--border-default)] pb-0"
+            role="tablist"
+            aria-label={t('bots.settingsNav.title')}
           >
-            <label className="flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
-              {t('bots.descriptionLabel')}
-              <input
-                value={description}
-                onChange={(event) => {
-                  setDescription(event.target.value);
-                  autosave.onEdit('text');
-                }}
-                onBlur={() => void autosave.flush()}
-                placeholder={t('bots.descriptionPlaceholder')}
-                className="h-10 rounded-xl border border-[var(--border-default)] bg-[var(--surface)] px-3 text-14 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
-              />
-            </label>
-
-            <label className="mt-4 flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
-              {t('bots.background.title')}
-              <textarea
-                value={backgroundDraft ?? background}
-                onChange={(event) => {
-                  setBackgroundDraft(event.target.value);
-                  setIdentitySource((current) => writeBotBackground(current, event.target.value));
-                  autosave.onEdit('text');
-                }}
-                onBlur={() => void autosave.flush()}
-                placeholder={t('bots.background.placeholder')}
-                aria-label={t('bots.background.title')}
-                rows={8}
-                className="w-full resize-y rounded-xl border border-[var(--border-default)] bg-[var(--surface)] px-3 py-2.5 text-13 leading-5 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
-              />
-            </label>
-
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--surface-chip)] px-3 py-2.5">
-              <span className="min-w-0 flex-1">
-                <span className="block text-11 text-[var(--text-tertiary)]">
-                  {t('bots.persona.quickAdjustLabel')}
-                </span>
-                <span className="mt-0.5 block text-12 text-[var(--text-primary)]">
-                  {personaSummaryText(t, persona)}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setPersonaOpen(true)}
-                className="h-8 shrink-0 rounded-lg border border-[var(--border-default)] px-3 text-11 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-              >
-                {t('bots.persona.adjustButton')}
-              </button>
-            </div>
-
-            <div className="mt-5 border-t border-[var(--border-default)] pt-5">
-              <p className="mb-3 text-11 font-medium uppercase tracking-[0.1em] text-[var(--text-tertiary)]">
-                {t('bots.appearanceTitle')}
-              </p>
-              <div className="flex items-center gap-3">
-                <BotAvatarPicker
-                  name={name}
-                  avatar={avatar}
-                  avatarColor={avatarColor}
-                  onChange={(next) => {
-                    setAvatar(next.emoji);
-                    setAvatarColor(next.hue);
-                    autosave.onEdit('instant');
+            {BOT_DETAIL_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const selected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    navigate(`/bots/${bot.id}?settings=1&tab=${tab.id}`, { replace: true });
                   }}
-                />
-                <label className="min-w-0 flex-1 text-12 text-[var(--text-secondary)]">
-                  <span className="mb-1.5 block">{t('bots.nameLabel')}</span>
-                  <input
-                    value={name}
-                    onChange={(event) => {
-                      setName(event.target.value);
-                      autosave.onEdit('text');
-                    }}
-                    onBlur={() => void autosave.flush()}
-                    aria-label={t('bots.nameLabel')}
-                    className="h-10 w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface)] px-3 text-14 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
-                  />
-                </label>
-              </div>
-            </div>
-          </BotSettingsBlock>
-
-          {/*
-            Hermes 把 model / skills / toolsets / SOUL 收进 Advanced；Grok 的资料页
-            同样只保留身份、描述和通知。Cindy 的渠道、项目、记忆与迁移能力更多，
-            但全部仍属于二级管理面，必须从同一个披露点向下展开，不能一半插到按钮
-            上方、一半落在下方。
-          */}
-          <section
-            ref={(el) => {
-              anchorRefs.current.advanced = el;
-            }}
-            className="scroll-mt-6"
-          >
-            <button
-              type="button"
-              onClick={() => setAdvancedOpen((current) => !current)}
-              aria-expanded={advancedOpen}
-              className="inline-flex items-center gap-1 text-12 font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-            >
-              {/* 一个方向指示就够。文案里原来还留着一个「›」,和这个 chevron 指的方向
-                  不一样,两个箭头打架。 */}
-              {advancedOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              {t('bots.advancedLinkLabel')}
-            </button>
-
-            {advancedOpen ? (
-              <div className="mt-4 flex flex-col gap-5">
-                <BotSettingsBlock
-                  icon={Sparkles}
-                  title={t('bots.settingsBlocks.can')}
-                  hint={t('bots.settingsBlocks.canDescription')}
-                  blockRef={(el) => {
-                    anchorRefs.current.can = el;
-                    anchorRefs.current.schedule = el;
-                  }}
-                >
-                  <BotAbilityWall
-                    connections={visibleChannelConnections}
-                    isChannelMounted={(connection) => Boolean(mountedChannelFor(connection))}
-                    channelBusyId={channelBusy}
-                    onToggleChannel={(connection) => void toggleChannel(connection)}
-                    onConnectAccount={(kind) => {
-                      const path = botChannelConnectPath(kind);
-                      if (path) navigate(path);
-                    }}
-                  />
-                  {channelError ? (
-                    <p className="mt-3 text-11 text-[var(--text-danger)]">{channelError}</p>
-                  ) : null}
-                </BotSettingsBlock>
-
-                <BotSettingsBlock
-                  icon={FolderGit2}
-                  title={t('bots.settingsBlocks.understand')}
-                  hint={hasFolder ? undefined : t('bots.settingsBlocks.understandDescription')}
-                  blockRef={(el) => {
-                    anchorRefs.current.understand = el;
-                  }}
-                >
-                  <BotFolderCards botId={bot.id} bindings={bot.projectBindings ?? []} />
-                </BotSettingsBlock>
-
-                <div
-                  ref={(el) => {
-                    anchorRefs.current.grew = el;
-                  }}
-                  className="flex scroll-mt-6 flex-col gap-5"
-                >
-                  {capabilities.memory ? (
-                    <BotGrowthLists
-                      botId={bot.id}
-                      highlight={highlight}
-                      seedEntries={templateSeedEntries}
-                    />
-                  ) : (
-                    <BotSettingsBlock icon={BookMarked} title={t('bots.memoryRecovery.title')}>
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="min-w-0 text-11 leading-4 text-[var(--text-tertiary)]">
-                          {t('bots.memoryRecovery.description')}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateCapability('memory', true)}
-                          className="h-8 shrink-0 rounded-lg border border-[var(--border-default)] px-3 text-11 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-                        >
-                          {t('bots.memoryRecovery.action')}
-                        </button>
-                      </div>
-                    </BotSettingsBlock>
+                  className={cn(
+                    '-mb-px inline-flex h-9 shrink-0 items-center gap-2 border-b-2 px-0.5 text-12 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+                    selected
+                      ? 'border-[var(--text-primary)] text-[var(--text-primary)]'
+                      : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
                   )}
-                </div>
+                >
+                  <Icon size={14} />
+                  {t(tab.labelKey)}
+                </button>
+              );
+            })}
+          </div>
 
-                <section className={BOT_SETTINGS_BLOCK_CLASS}>
-                  <BotSettingsBlockHeading
-                    icon={Settings2}
-                    title={t('bots.advancedIdentity.title')}
-                    hint={`${t('bots.channelLabel')}: ${channelLabel(bot.channel)}`}
+          <div
+            ref={contentRef}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-8 pt-4"
+          >
+            <div className="mx-auto flex max-w-3xl flex-col gap-4 pb-10">
+              {activeTab === 'connections' ? (
+                <>
+                  <BotCapabilitySettings
+                    bot={bot}
+                    capabilities={capabilities}
+                    selectedSkills={selectedSkills}
+                    runtimeSnapshot={canonicalProjection?.runtimeSnapshot}
+                    remoteHostId={selectedProject?.remoteHostId}
+                    onCapabilitiesChange={applyCapabilities}
+                    onSelectedSkillsChange={applySelectedSkills}
                   />
-                  <label className="mt-4 flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
-                    {t('bots.userContextSourceLabel')}
-                    <textarea
-                      value={userContextSource}
-                      onChange={(event) => {
-                        setUserContextSource(event.target.value);
-                        autosave.onEdit('text');
-                      }}
-                      onBlur={() => void autosave.flush()}
-                      placeholder={t('bots.userContextSourcePlaceholder')}
-                      rows={4}
-                      className="resize-y rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-13 text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
+                  <BotSettingsBlock
+                    icon={MessageCircleMore}
+                    title={t('bots.imConnectionsTitle')}
+                    hint={t('bots.imConnectionsDescription')}
+                  >
+                    <BotAbilityWall
+                      connections={visibleChannelConnections}
+                      isChannelMounted={(connection) => Boolean(mountedChannelFor(connection))}
+                      channelBusyId={channelBusy}
+                      onToggleChannel={(connection) => void toggleChannel(connection)}
                     />
-                    <span className="text-11 leading-5 text-[var(--text-tertiary)]">
-                      {t('bots.userContextSourceDescription')}
-                    </span>
-                  </label>
-                </section>
+                    {channelError ? (
+                      <p className="mt-3 text-11 text-[var(--text-danger)]">{channelError}</p>
+                    ) : null}
+                  </BotSettingsBlock>
+                  <BotRouteSettings bot={bot} onOpenTask={onOpenSession} />
+                  <BotEventInboxSettings bot={bot} />
+                </>
+              ) : null}
 
-                <section className={BOT_SETTINGS_BLOCK_CLASS}>
-                  <BotSettingsBlockHeading
-                    icon={Sparkles}
-                    title={t('bots.advancedCapabilities.title')}
-                    hint={t('bots.advancedCapabilities.description')}
+              {activeTab === 'growth' ? (
+                <>
+                  <BotSettingsBlock
+                    icon={BookMarked}
+                    title={t('bots.memoryLabel')}
+                    hint={t(
+                      capabilities.memory
+                        ? 'bots.memoryDescription'
+                        : 'bots.memoryRecovery.description',
+                    )}
+                    action={
+                      <Switch
+                        checked={capabilities.memory}
+                        onCheckedChange={(checked) => updateCapability('memory', checked)}
+                        aria-label={t('bots.memoryLabel')}
+                      />
+                    }
                   />
-                  <div className="mt-4 grid min-w-0 gap-4 md:grid-cols-2">
-                    <div className="flex min-w-0 flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
-                      <span>{t('bots.harnessLabel')}</span>
+                  <BotSettingsBlock
+                    icon={UserRound}
+                    title={t('bots.advancedIdentity.title')}
+                    hint={t('bots.userContextSourceDescription')}
+                  >
+                    <label className="flex flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
+                      {t('bots.userContextSourceLabel')}
+                      <textarea
+                        value={userContextSource}
+                        onChange={(event) => {
+                          setUserContextSource(event.target.value);
+                          autosave.onEdit('text');
+                        }}
+                        onBlur={() => void autosave.flush()}
+                        placeholder={t('bots.userContextSourcePlaceholder')}
+                        rows={5}
+                        className="resize-y rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-13 text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)] focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
+                      />
+                    </label>
+                  </BotSettingsBlock>
+                  <BotGrowthLists
+                    botId={bot.id}
+                    highlight={highlight}
+                    seedEntries={templateSeedEntries}
+                  />
+                </>
+              ) : null}
+
+              {activeTab === 'model' ? (
+                <BotSettingsBlock
+                  icon={PlugZap}
+                  title={t('bots.settingsTabs.model')}
+                  hint={t('bots.model.description')}
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const model = defaultBotModel(vendor);
+                        const prefs = getDraft().lastByVendor[vendor];
+                        setCapabilities((current) => ({
+                          ...current,
+                          model,
+                          modelOverride: null,
+                          providerId: model === prefs.model ? (prefs.providerId ?? null) : null,
+                          effort: prefs.effort,
+                          fastMode: getDraft().fastModeByModel[model] === true,
+                        }));
+                        autosave.onEdit('instant');
+                      }}
+                      className="h-8 rounded-lg border border-[var(--border-default)] px-3 text-11 text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                    >
+                      {t('bots.model.restoreDefault')}
+                    </button>
+                  }
+                >
+                  <div
+                    data-testid="bot-model-controls"
+                    className="flex w-full min-w-0 max-w-xl flex-col gap-5"
+                  >
+                    <div className="flex min-w-0 flex-col gap-2">
+                      <span className="text-12 font-medium leading-5 text-[var(--text-secondary)]">
+                        {t('bots.harnessLabel')}
+                      </span>
                       <VendorSegmentedSwitcher
                         value={vendor}
                         hiddenVendors={hiddenVendors}
-                        dense
-                        width={300}
+                        visualVariant="settings"
+                        width={576}
                         className="max-w-full"
                         ariaLabel={t('bots.harnessLabel')}
                         onChange={(next) => {
                           if (next === 'orca') return;
                           const prefs = getDraft().lastByVendor[next];
-                          // 与新建伙伴同一条判定:用户真选过的优先,没选过跟系统默认。
-                          // 直接读 prefs.model 会把种子快照当成用户的选择。
                           const model = defaultBotModel(next);
                           setCapabilities((current) => ({
                             ...current,
                             harness: next === 'cc' ? 'claude' : next,
                             model,
                             modelOverride: null,
-                            // 来源必须与模型同源,否则会拿一个来源去解析另一个来源的 id。
                             providerId: model === prefs.model ? (prefs.providerId ?? null) : null,
                             effort: prefs.effort,
                             fastMode: getDraft().fastModeByModel[model] === true,
@@ -869,10 +846,11 @@ export function BotSettings({
                         }}
                       />
                     </div>
-                    <div className="flex min-w-0 flex-col gap-1.5 text-12 text-[var(--text-secondary)]">
-                      <span>{t('bots.modelLabel')}</span>
-                      <div className="flex items-center gap-2">
-                        <ModelSelector
+                    <div className="flex min-w-0 flex-col gap-2">
+                      <span className="text-12 font-medium leading-5 text-[var(--text-secondary)]">
+                        {t('bots.modelLabel')}
+                      </span>
+                      <ModelSelector
                         modelId={capabilities.model}
                         effort={capabilities.effort}
                         vendorKey={vendor}
@@ -889,7 +867,6 @@ export function BotSettings({
                             : (enabled) => updateCapability('fastMode', enabled)
                         }
                         onModelChange={(model) => {
-                          updateCapability('model', model);
                           setCapabilities((current) => ({
                             ...current,
                             model,
@@ -900,9 +877,9 @@ export function BotSettings({
                               fastMode: current.fastMode,
                             },
                           }));
+                          autosave.onEdit('instant');
                         }}
                         onEffortChange={(effort) => {
-                          updateCapability('effort', effort);
                           setCapabilities((current) => ({
                             ...current,
                             effort,
@@ -913,6 +890,7 @@ export function BotSettings({
                               fastMode: current.fastMode,
                             },
                           }));
+                          autosave.onEdit('instant');
                         }}
                         onProviderChange={(providerId, model, effort) => {
                           setCapabilities((current) => ({
@@ -931,185 +909,68 @@ export function BotSettings({
                         }}
                         onNavigateToProviders={() => navigate('/settings?tab=providers')}
                         unknownModelLabel={(model) => t('bots.modelUnavailable', { model })}
-                        />
-                        {capabilities.modelOverride ? (
-                          <button
-                            type="button"
-                            className="shrink-0 text-11 text-[var(--text-tertiary)] underline-offset-2 hover:text-[var(--text-primary)] hover:underline"
-                            onClick={() => {
-                              const resolved = getEffectiveBotModelSettings(vendor, null);
-                              setCapabilities((current) => ({
-                                ...current,
-                                model: resolved.model,
-                                providerId: resolved.providerId,
-                                effort: resolved.effort,
-                                fastMode: resolved.fastMode,
-                                modelOverride: null,
-                              }));
-                              autosave.onEdit('instant');
-                            }}
-                          >
-                            {t('settings.defaults.restore')}
-                          </button>
-                        ) : null}
-                      </div>
+                      />
                     </div>
                   </div>
-                  <BotCapabilitySettings
-                    bot={bot}
-                    capabilities={capabilities}
-                    selectedSkills={selectedSkills}
-                    runtimeSnapshot={canonicalProjection?.runtimeSnapshot}
-                    remoteHostId={selectedProject?.remoteHostId}
-                    onCapabilitiesChange={applyCapabilities}
-                    onSelectedSkillsChange={applySelectedSkills}
-                  />
-                </section>
+                </BotSettingsBlock>
+              ) : null}
 
-                {/*
-                  这里曾经还有一张「它会做什么」芯片墙。产品裁决 2026-08-19 把它
-                  整块拆了:自动化与渠道各自归位之后,只剩「动手做事」一颗开关,
-                  而它与对话输入框里的权限 chip 是**同一个** capabilities.permissions
-                  的两个控制点 —— 两个入口管一件事,迟早又长出一对互相矛盾的说法。
-                  权限档位由每天说话的地方(输入框的权限 chip,已接通 Profile 回写)
-                  唯一负责;能力墙「自带」里的「🛠 动手做事」只陈述这项能力存在。
+              {activeTab === 'project' ? (
+                <>
+                  <BotSettingsBlock
+                    icon={FolderGit2}
+                    title={t('bots.homeFolder.title')}
+                    hint={t('bots.homeFolder.description')}
+                    action={
+                      bot.homeDir ? (
+                        <button
+                          type="button"
+                          onClick={() => void window.electronAPI.openPath(bot.homeDir as string)}
+                          className="h-8 shrink-0 rounded-lg border border-[var(--border-default)] px-3 text-11 text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                        >
+                          {t('bots.homeFolder.open')}
+                        </button>
+                      ) : null
+                    }
+                  >
+                    <BotFolderCards botId={bot.id} bindings={bot.projectBindings ?? []} />
+                  </BotSettingsBlock>
+                  <BotProjectSettings bot={bot} />
+                </>
+              ) : null}
 
-                  芯片墙上那两条与开关无关的信息挪到了下面的「任务生命周期」——
-                  它们本来讲的就是「Profile 版本 vs 正在跑的任务」,和 Renew 按钮
-                  同属一件事。渠道错误也不再在这里重复,它已经长在「能力与连接」里。
-                */}
-
-                {/*
-                  伙伴的家 —— 直接打开它在磁盘上的那个文件夹。
-
-                  档案落盘为权威(botProfileFolder.ts)的全部用户价值就是「能用编辑器
-                  改、能备份、能复制一份改改就是新伙伴」。在这之前界面上**没有一处**
-                  告诉用户它在哪,那份价值等于不存在。
-
-                  Hermes 不需要这个入口:它是命令行,用户本来就站在文件系统里
-                  (`~/.hermes/profiles/<名字>/`,见 bot-mode.md 的 CLI parity 表)。
-                  Cindy 是桌面应用,不给入口就等于没有。**这一条是 Cindy 自己的产品
-                  判断,不是抄来的。**
-
-                  远端伙伴没有本机路径,那时 homeDir 为空,整块不渲染。
-                */}
-                {bot.homeDir ? (
-                  <section className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="text-13 font-medium text-[var(--text-primary)]">
-                          {t('bots.homeFolder.title')}
-                        </div>
-                        <div className="mt-1 truncate text-12 text-[var(--text-tertiary)]">
-                          {t('bots.homeFolder.description')}
-                        </div>
-                      </div>
+              {activeTab === 'maintenance' ? (
+                <>
+                  <BotLifecycleSettings bot={bot} onOpenSession={onOpenSession} onRenew={onRenew} />
+                  <BotSettingsBlock
+                    icon={Download}
+                    title={t('bots.dataManagement.title')}
+                    hint={t('bots.dataManagement.exportHint')}
+                    action={
                       <button
                         type="button"
-                        onClick={() => {
-                          void window.electronAPI.openPath(bot.homeDir as string);
-                        }}
-                        className="shrink-0 rounded-lg border border-[var(--border-default)] px-3 py-1.5 text-12 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                        disabled={portabilityBusy}
+                        onClick={() => void handleExport()}
+                        className="inline-flex h-8 items-center gap-2 rounded-lg border border-[var(--border-default)] px-3 text-11 text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
                       >
-                        {t('bots.homeFolder.open')}
+                        <Download size={13} />
+                        {portabilityBusy
+                          ? t('bots.portability.exporting')
+                          : t('bots.actions.export')}
                       </button>
-                    </div>
-                  </section>
-                ) : null}
-
-                <BotRouteSettings bot={bot} onOpenTask={onOpenSession} />
-
-                <BotProjectSettings bot={bot} />
-
-                <BotEventInboxSettings bot={bot} />
-
-                <section className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-13 font-medium text-[var(--text-primary)]">
-                          {t('bots.sessionLifecycleTitle')}
-                        </p>
-                        {/* 这里表达运行时解析结果；Profile 更新会在下一轮自动刷新，
-                            不再把版本差异伪装成需要用户 Renew 的动作。 */}
-                        <span className="rounded-full bg-[var(--surface-chip)] px-2.5 py-1 text-10 text-[var(--text-secondary)]">
-                          {t(`bots.runtimeState.${runtimeState}`)}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-12 leading-5 text-[var(--text-secondary)]">
-                        {t('bots.sessionLifecycleDescription')}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={compactCanonicalChat}
-                      disabled={renewing}
-                      className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border border-[var(--border-default)] px-3 text-12 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
-                    >
-                      <RefreshCcw size={14} className={renewing ? 'animate-spin' : undefined} />
-                      {renewing ? t('bots.renewing') : t('bots.renew')}
-                    </button>
-                  </div>
-                  <p className="mt-3 rounded-lg bg-[var(--surface-chip)] px-3 py-2 text-11 leading-5 text-[var(--text-secondary)]">
-                    {t('bots.capabilitiesDeferred')}
-                  </p>
-                </section>
-
-                <BotLifecycleSettings bot={bot} onOpenSession={onOpenSession} onRenew={onRenew} />
-
-                <section className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5">
-                  <div className="flex items-center gap-2 text-14 font-medium text-[var(--text-primary)]">
-                    <Download size={16} />
-                    {t('bots.portability.title')}
-                  </div>
-                  <p className="mt-1 text-12 leading-5 text-[var(--text-secondary)]">
-                    {t('bots.portability.description')}
-                  </p>
-                  {portabilityNotice ? (
-                    <p
-                      className="mt-3 rounded-lg bg-[var(--surface-chip)] px-3 py-2 text-11 leading-5 text-[var(--text-secondary)]"
-                      role="status"
-                    >
-                      {portabilityNotice}
-                    </p>
-                  ) : null}
-                  <button
-                    type="button"
-                    disabled={portabilityBusy}
-                    onClick={() => {
-                      setPortabilityBusy(true);
-                      setPortabilityNotice(null);
-                      void exportBotBundle(bot.id)
-                        .then((result) => {
-                          if (!result.canceled) {
-                            setPortabilityNotice(
-                              result.redactionCount
-                                ? t('bots.portability.exportedRedacted', {
-                                    count: result.redactionCount,
-                                  })
-                                : t('bots.portability.exported'),
-                            );
-                          }
-                        })
-                        .catch((error: unknown) => {
-                          setPortabilityNotice(
-                            error instanceof Error ? error.message : String(error),
-                          );
-                        })
-                        .finally(() => setPortabilityBusy(false));
-                    }}
-                    className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border-default)] px-3 text-12 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                    }
                   >
-                    <Download size={14} />
-                    {portabilityBusy
-                      ? t('bots.portability.exporting')
-                      : t('bots.portability.export')}
-                  </button>
-                </section>
-              </div>
-            ) : null}
-          </section>
-        </div>
+                    {portabilityNotice ? (
+                      <p className="text-11 text-[var(--text-tertiary)]" role="status">
+                        {portabilityNotice}
+                      </p>
+                    ) : null}
+                  </BotSettingsBlock>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </section>
       </div>
 
       <BotPersonaWizard
@@ -1137,11 +998,21 @@ export function BotSettings({
         }}
       />
 
-      {/*
-        挂载 / 卸载渠道现在同时来自「能力与连接」与高级能力区,所以迁移与
-        回滚确认必须挂在页面根上——两处都可能触发,任何一处都不能因为「高级」当前
-        收起就吞掉确认框,用户会看到「点了没反应」。
-      */}
+      <BotProfileDialog
+        open={editProfileOpen}
+        onOpenChange={setEditProfileOpen}
+        value={{ name, description, identitySource, avatar, avatarColor }}
+        mode="edit"
+        onSave={(next) => {
+          setName(next.name);
+          setDescription(next.description);
+          setIdentitySource(next.identitySource);
+          setAvatar(next.avatar);
+          setAvatarColor(next.avatarColor);
+          autosave.onEdit('text');
+        }}
+      />
+      {/* 迁移与回滚确认挂在页面根部，避免随任一 Tab 卸载。 */}
       <Dialog.Root
         open={migrationPlan !== null}
         onOpenChange={(open) => {
@@ -1267,8 +1138,8 @@ export function BotsHomeView() {
   const creatingBotRef = useRef<{ botId: string; token: symbol } | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [createSessionError, setCreateSessionError] = useState<unknown>(null);
-  const importingRef = useRef(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  const importingRef = useRef(false);
   const selectedBot = useMemo(() => bots.find((bot) => bot.id === botId) ?? null, [botId, bots]);
   // `?add=1` 是阵容还在弹模态那阵子的入口。阵容页面化之后它只剩兼容职责:
   // 老书签、老深链一律送到 /bots/roster,不再在这里开一层浮层。
@@ -1374,28 +1245,51 @@ export function BotsHomeView() {
     }
   }, [addRequested, botId, bots, navigate, searchParams, selectedBot]);
 
-  // 顶栏注入区:选中伙伴时是「头像 + 名字」,点它进 TA 的设置(与对话顶栏同一入口
-  // 语义);没有选中伙伴才退回功能名。
+  // 顶栏注入区:伙伴页保留「头像 + 名字」入口;设置页升级成
+  // 「头像 + 名字 > 设置」面包屑,让当前页归属一眼可见。
   const headerContent = useMemo(
     () =>
       selectedBot ? (
-        <button
-          type="button"
-          onClick={() => navigate(`/bots/${selectedBot.id}?settings=1`)}
-          title={t('bots.settings')}
-          className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-13 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        >
-          <BotAvatar bot={selectedBot} size="xs" />
-          <span className="min-w-0 truncate">{selectedBot.name}</span>
-        </button>
+        settingsOpen ? (
+          <div className="flex min-w-0 items-center gap-1 text-13" aria-label={t('bots.settings')}>
+            <button
+              type="button"
+              onClick={() => navigate(`/bots/${selectedBot.id}`)}
+              title={t('bots.backToChat')}
+              className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            >
+              <BotAvatar bot={selectedBot} size="xs" />
+              <span className="min-w-0 truncate">{selectedBot.name}</span>
+            </button>
+            <ChevronRight
+              size={14}
+              aria-hidden="true"
+              className="shrink-0 text-[var(--text-tertiary)]"
+            />
+            <span className="shrink-0 px-1 font-medium text-[var(--text-primary)]">
+              {t('bots.settings')}
+            </span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => navigate(`/bots/${selectedBot.id}?settings=1`)}
+            title={t('bots.settings')}
+            className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-13 font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          >
+            <BotAvatar bot={selectedBot} size="xs" />
+            <span className="min-w-0 truncate">{selectedBot.name}</span>
+          </button>
+        )
       ) : (
         <div className="flex items-center gap-2 text-13 font-medium text-[var(--text-primary)]">
           <Bot size={15} />
           {t('bots.title')}
         </div>
       ),
-    [navigate, selectedBot, t],
+    [navigate, selectedBot, settingsOpen, t],
   );
   useRegisterContentHeader(headerContent);
 
@@ -1519,14 +1413,7 @@ export function BotsHomeView() {
         creatingBotRef.current = null;
       }
     };
-  }, [
-    addRequested,
-    createCanonicalSession,
-    selectedBot,
-    sessionId,
-    settingsOpen,
-    navigate,
-  ]);
+  }, [addRequested, createCanonicalSession, selectedBot, sessionId, settingsOpen, navigate]);
 
   if (!selectedBot) {
     // 一个伙伴都没有 → 主区直接就是阵容页,没有中间那一层。
@@ -1569,7 +1456,6 @@ export function BotsHomeView() {
                 : `/bots/${selectedBot.id}/session/${targetSessionId}`;
             navigate(route, { state: searchJump ? { searchJump } : undefined });
           }}
-          renewing={isCreatingSession}
           onBack={() => {
             if (selectedBot.status === 'archived') {
               navigate('/bots', { replace: true });

@@ -6484,6 +6484,10 @@
     "add": "新增夥伴",
     "addTitle": "新增夥伴",
     "addDescription": "先建立本地夥伴，再依需要掛載 IM 訊息通道。",
+    "createMenu": {
+      "recruit": "前往招募",
+      "create": "建立夥伴"
+    },
     "createWizard": {
       "createFailed": "無法建立夥伴，請重試。",
       "templates": {
@@ -6627,11 +6631,13 @@
     "descriptionPlaceholder": "例如：PR 總管、私人助理、專案夥伴",
     "skillsLabel": "Skills",
     "skillsPlaceholder": "以逗號分隔多個 Skill 名稱",
-    "skillsDescription": "這裡只儲存已安裝 Skill 的參照；執行時仍由原生 Skill 機制解析與載入。",
+    "skillsDescription": "選擇這個夥伴可以使用的 Skill。",
     "skillCatalogLoading": "正在讀取目前 Harness 可用的 Skills…",
     "skillCatalogError": "Skills 讀取失敗，已儲存的選擇會繼續保留。",
     "skillAllowlistFrozenHint": "只用固定的這幾項。以後新增的技能不會自動加進來 —— 想讓它跟著更新，把上面切成「跟隨全域」。",
     "skillCatalogEmpty": "目前 Harness 與專案中沒有可用的 Skill。",
+    "skillCatalogExpand": "再顯示 {{count}} 個",
+    "skillCatalogCollapse": "收起",
     "skillConfiguredUnavailable": "目前無法使用 · 點按移除",
     "close": "關閉",
     "avatarPicker": {
@@ -6735,6 +6741,28 @@
     "settingsNav": {
       "title": "設定分組"
     },
+    "settingsTabs": {
+      "connections": "能力與連接",
+      "growth": "記憶和成長",
+      "model": "模型",
+      "project": "專案",
+      "maintenance": "運行維護"
+    },
+    "model": {
+      "description": "選擇這位夥伴使用的引擎和模型。",
+      "restoreDefault": "恢復預設模型"
+    },
+    "dataManagement": {
+      "title": "資料管理",
+      "exportHint": "將這個夥伴匯出為可遷移的 .cindy 檔案。"
+    },
+    "actions": {
+      "message": "傳訊息",
+      "addToGroup": "加入群組",
+      "export": "匯出"
+    },
+    "editProfile": "編輯夥伴",
+    "editProfileDescription": "更新夥伴的身份和描述。",
     "emptyTitle": "尚未建立夥伴",
     "emptyDescription": "先定義夥伴的職責，再依需要連接工具與訊息通道。",
     "noDescription": "尚無描述",
@@ -6745,8 +6773,6 @@
     "historySession": "歷史任務",
     "open": "開啟",
     "archived": "已封存",
-    "sessionLifecycleTitle": "任務生命週期",
-    "sessionLifecycleDescription": "壓縮只整理底層上下文；主工作階段、訊息記錄與夥伴身分都保持不變。",
     "renew": "壓縮上下文",
     "renewing": "正在壓縮…",
     "historyTitle": "封存歷史",
@@ -6937,10 +6963,6 @@
     "userContextSourceDescription": "它該知道的關於你的事。和它的個性、和它自己記下的東西分開存，跟其它設定一起凍在同一個版本裡。",
     "chooseAvatar": "選擇頭像 {{avatar}}",
     "chooseAvatarColor": "選擇頭像顏色 {{color}}",
-    "advancedCapabilities": {
-      "title": "這些能力背後的技術細節",
-      "description": "跑在哪個引擎和模型上，以及工具和技能。日常使用不用動這裡。"
-    },
     "memoryRecovery": {
       "title": "這個夥伴的長期記憶目前是關閉的",
       "description": "長期記憶現在對新夥伴恆開。這個夥伴是先前被關掉的，這裡是重新開啟的入口。",
@@ -6948,7 +6970,6 @@
     },
     "capabilitiesTitle": "能力設定",
     "capabilitiesDescription": "任務開始時，它真正拿到的就是這些本事。",
-    "capabilitiesDeferred": "這裡改完會在下一輪自動套用，不需要新增工作階段或清除記錄。",
     "profileApply": {
       "title": "設定已儲存",
       "description": "新設定已經存好了，但目前這個任務還在按舊設定跑。開個新任務才會用上，目前這個會收進歷史。",
@@ -6957,26 +6978,20 @@
       "saveFailed": "夥伴設定未能儲存，變更沒有生效。",
       "renewFailed": "新設定已經存好了，但沒能開出新任務。目前這個任務沒有變化。"
     },
-    "runtimeState": {
-      "saved": "已儲存，啟動後生效",
-      "prepared": "啟動設定已準備，尚未確認生效",
-      "applied": "目前任務已生效",
-      "pendingRenew": "等待下一輪重新整理",
-      "degraded": "部分能力不可用",
-      "failed": "上次啟動失敗，設定未生效"
-    },
     "modelLabel": "模型",
     "modelUnavailable": "{{model}}（目前無法使用）",
     "harnessLabel": "引擎",
     "capabilityMode": {
-      "inherit": "使用目前可用能力",
-      "allowlist": "逐項選擇"
+      "inherit": "跟隨全域",
+      "allowlist": "自訂"
     },
     "capabilityCatalogLoading": "正在讀取目前專案可用的能力…",
     "capabilityCatalogError": "能力目錄讀取失敗，已儲存的選擇會繼續保留。",
-    "toolsetsLabel": "Cindy 工具",
-    "toolsetCatalogEmpty": "目前專案沒有可設定的 Cindy 工具。",
-    "mcpServersLabel": "自訂 MCP Server",
+    "toolsetsLabel": "Cindy 內建工具",
+    "toolsetsDescription": "選擇這個夥伴可以使用的 Cindy 內建工具。",
+    "toolsetCatalogEmpty": "目前專案沒有可設定的 Cindy 內建工具。",
+    "mcpServersLabel": "自訂 MCP",
+    "mcpServersDescription": "選擇這個夥伴可以使用的自訂 MCP。",
     "mcpCatalogEmpty": "尚未設定自訂 MCP Server。",
     "capabilityApplied": "目前已用",
     "capabilityUnavailable": "目前不可用",
@@ -7106,9 +7121,6 @@
       },
       "delegateLimitsHint": "下面兩項只約束這條 Routine 派給其他夥伴的子任務，不封頂它自己的用量。"
     },
-    "permissionsLabel": "權限模式",
-    "permissionAsk": "操作前詢問",
-    "permissionTrusted": "信任操作",
     "codexAutomaticCompact": "Codex 伙伴會自己壓縮上下文，/new 也會保留目前任務。只有確實需要從頭開始時，才去開新任務。",
     "chatWelcome": "與 {{name}} 對話",
     "previewHint": "本地預覽——訊息暫時不會傳送給真實 Agent。",
@@ -7328,11 +7340,12 @@
     "advancedLinkLabel": "進階設定",
     "appearanceTitle": "名稱與頭像",
     "persona": {
-      "title": "性格與工作方式",
+      "title": "性格",
       "description": "用下面三項快速調整說話方式、主動程度與稱呼；更完整的協作方式寫在職責說明裡。",
       "freeformPlaceholder": "例如：說話直接一點；遇到風險主動提醒；不確定時先問我。",
       "freeformHint": "這會成為夥伴身分的一部分，不只是介面顯示。",
-      "adjustButton": "設定",
+      "addButton": "點擊新增",
+      "adjustButton": "一鍵設定",
       "quickAdjustLabel": "快速設定（選填）",
       "stepStyle": "說話風格",
       "stepProactivity": "主動程度",
@@ -7407,6 +7420,7 @@
     },
     "learned": {
       "title": "{{pronoun}}學會的",
+      "description": "這位夥伴在工作中學會的技能與做法。",
       "empty": "還沒長出什麼本事——多讓{{pronoun}}做幾件事。",
       "notesTitle": "{{pronoun}}給自己記的做法",
       "deleteTitle": "刪除這個技能",
@@ -7425,19 +7439,11 @@
       "hint": "點開看{{pronoun}}記下了什麼"
     },
     "abilityWall": {
-      "builtinTitle": "自帶",
-      "connectableTitle": "可以連上",
-      "abilities": {
-        "writing": "✍️ 寫作與檔案",
-        "research": "🔍 查資料",
-        "doing": "🛠 動手做事",
-        "schedule": "⏰ 定時幹活",
-        "collab": "🤝 和夥伴協作"
-      },
-      "connectAccount": "連接帳號",
-      "imBlocked": "一個夥伴只能連一個 IM——先斷開 {{channel}}",
-      "connectedTitle": "已連上"
+      "empty": "目前沒有可用的 IM 連線。",
+      "imBlocked": "一個夥伴只能連一個 IM——先斷開 {{channel}}"
     },
+    "imConnectionsTitle": "連接 IM",
+    "imConnectionsDescription": "管理這個夥伴實際連接的訊息帳號。",
     "folders": {
       "addButton": "＋ 給{{pronoun}}一個資料夾",
       "adding": "新增中…",
@@ -7523,7 +7529,7 @@
       "years": "{{n}} 年前加入"
     },
     "background": {
-      "title": "職責、邊界與協作方式",
+      "title": "職責",
       "edit": "編輯",
       "done": "完成",
       "placeholder": "負責什麼、哪些事情主動推進、哪些決策必須先問，以及希望它如何溝通。",

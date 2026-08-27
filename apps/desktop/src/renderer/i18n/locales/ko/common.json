@@ -6492,6 +6492,10 @@
     "add": "동료 추가",
     "addTitle": "동료 추가",
     "addDescription": "먼저 로컬 동료를 만들고 필요할 때 IM 메시지 채널을 연결합니다.",
+    "createMenu": {
+      "recruit": "예시에서 영입",
+      "create": "동료 만들기"
+    },
     "createWizard": {
       "createFailed": "동료를 만들 수 없습니다. 다시 시도하세요.",
       "templates": {
@@ -6635,11 +6639,13 @@
     "descriptionPlaceholder": "예: PR 관리자, 개인 비서, 프로젝트 파트너",
     "skillsLabel": "스킬",
     "skillsPlaceholder": "스킬 이름을 쉼표로 구분",
-    "skillsDescription": "설치된 Skill의 참조만 저장하며, 런타임 해석과 로드는 네이티브 Skill 메커니즘이 담당합니다.",
+    "skillsDescription": "이 팀원이 사용할 수 있는 Skill을 선택합니다.",
     "skillCatalogLoading": "이 Harness에서 사용할 수 있는 Skill을 불러오는 중…",
     "skillCatalogError": "Skill을 불러오지 못했습니다. 저장된 선택은 유지됩니다.",
     "skillAllowlistFrozenHint": "여기에 고정되어 있습니다. 앞으로 추가되는 스킬은 자동으로 들어오지 않습니다. 최신 상태를 따르게 하려면 위 선택기를 '전체 설정 따르기'로 바꾸세요.",
     "skillCatalogEmpty": "이 Harness와 프로젝트에서 사용할 수 있는 Skill이 없습니다.",
+    "skillCatalogExpand": "{{count}}개 더 보기",
+    "skillCatalogCollapse": "접기",
     "skillConfiguredUnavailable": "현재 사용할 수 없음 — 선택하여 제거",
     "close": "닫기",
     "avatarPicker": {
@@ -6743,6 +6749,28 @@
     "settingsNav": {
       "title": "설정 섹션"
     },
+    "settingsTabs": {
+      "connections": "기능과 연결",
+      "growth": "기억과 성장",
+      "model": "모델",
+      "project": "프로젝트",
+      "maintenance": "운영 관리"
+    },
+    "model": {
+      "description": "이 팀원이 사용할 엔진과 모델을 선택합니다.",
+      "restoreDefault": "기본 모델로 되돌리기"
+    },
+    "dataManagement": {
+      "title": "데이터 관리",
+      "exportHint": "이 동료를 이동 가능한 .cindy 파일로 내보냅니다."
+    },
+    "actions": {
+      "message": "메시지",
+      "addToGroup": "그룹에 추가",
+      "export": "내보내기"
+    },
+    "editProfile": "팀원 편집",
+    "editProfileDescription": "팀원의 역할과 설명을 업데이트합니다.",
     "emptyTitle": "아직 동료가 없습니다",
     "emptyDescription": "역할을 정해 동료를 만들고 필요한 도구와 메시지 채널을 연결하세요.",
     "noDescription": "설명 없음",
@@ -6753,8 +6781,6 @@
     "historySession": "기록 작업",
     "open": "열기",
     "archived": "보관됨",
-    "sessionLifecycleTitle": "작업 수명 주기",
-    "sessionLifecycleDescription": "압축은 내부 컨텍스트만 정리합니다. 기본 작업, 메시지 기록, 파트너 정체성은 그대로 유지됩니다.",
     "renew": "컨텍스트 압축",
     "renewing": "압축 중…",
     "historyTitle": "보관된 기록",
@@ -6945,10 +6971,6 @@
     "userContextSourceDescription": "파트너가 알아야 할 당신에 대한 정보예요. 성격이나 스스로 기억한 내용과는 따로 저장되고, 다른 설정과 함께 고정됩니다.",
     "chooseAvatar": "아바타 {{avatar}} 선택",
     "chooseAvatarColor": "아바타 색상 {{color}} 선택",
-    "advancedCapabilities": {
-      "title": "이 능력들 뒤의 상세 설정",
-      "description": "어떤 엔진과 모델로 돌아가는지, 그리고 도구와 스킬이에요. 평소 사용에는 건드릴 필요 없습니다."
-    },
     "memoryRecovery": {
       "title": "이 동료의 장기 메모리가 꺼져 있습니다",
       "description": "장기 메모리는 이제 새 동료에서 항상 켜집니다. 이 동료는 예전에 꺼진 상태라 여기서 다시 켤 수 있습니다.",
@@ -6956,7 +6978,6 @@
     },
     "capabilitiesTitle": "기능 설정",
     "capabilitiesDescription": "작업이 시작될 때 이 파트너가 실제로 갖게 되는 능력이에요.",
-    "capabilitiesDeferred": "여기서 바꾼 내용은 다음 턴에 자동 적용됩니다. 새 작업을 만들거나 기록을 지울 필요가 없습니다.",
     "profileApply": {
       "title": "설정을 저장했어요",
       "description": "새 설정은 저장했지만 지금 작업은 아직 이전 설정으로 돌아가고 있어요. 새 작업을 시작하면 적용되고, 지금 작업은 기록으로 옮겨집니다.",
@@ -6965,26 +6986,20 @@
       "saveFailed": "동료 설정을 저장하지 못했습니다. 변경 사항은 적용되지 않았습니다.",
       "renewFailed": "새 설정은 저장했지만 새 작업을 시작하지 못했어요. 지금 작업은 그대로입니다."
     },
-    "runtimeState": {
-      "saved": "저장됨 · 시작 후 적용",
-      "prepared": "시작 설정 준비됨 · 적용 확인 전",
-      "applied": "현재 작업에 적용됨",
-      "pendingRenew": "다음 턴 새로 고침 대기",
-      "degraded": "일부 기능 사용 불가",
-      "failed": "마지막 시작 실패 · 적용되지 않음"
-    },
     "modelLabel": "모델",
     "modelUnavailable": "{{model}}(현재 사용할 수 없음)",
     "harnessLabel": "엔진",
     "capabilityMode": {
-      "inherit": "현재 사용 가능한 기능 사용",
-      "allowlist": "개별 선택"
+      "inherit": "전역 설정 따르기",
+      "allowlist": "사용자 지정"
     },
     "capabilityCatalogLoading": "이 프로젝트에서 사용할 수 있는 기능을 불러오는 중…",
     "capabilityCatalogError": "기능 카탈로그를 불러오지 못했습니다. 저장된 선택은 유지됩니다.",
-    "toolsetsLabel": "Cindy 도구",
-    "toolsetCatalogEmpty": "이 프로젝트에는 설정 가능한 Cindy 도구가 없습니다.",
-    "mcpServersLabel": "사용자 지정 MCP 서버",
+    "toolsetsLabel": "Cindy 내장 도구",
+    "toolsetsDescription": "이 팀원이 사용할 수 있는 Cindy 내장 도구를 선택합니다.",
+    "toolsetCatalogEmpty": "이 프로젝트에는 설정 가능한 Cindy 내장 도구가 없습니다.",
+    "mcpServersLabel": "사용자 지정 MCP",
+    "mcpServersDescription": "이 팀원이 사용할 수 있는 사용자 지정 MCP 서버를 선택합니다.",
     "mcpCatalogEmpty": "아직 사용자 지정 MCP 서버가 설정되지 않았습니다.",
     "capabilityApplied": "사용 중",
     "capabilityUnavailable": "사용 불가",
@@ -7114,9 +7129,6 @@
       },
       "delegateLimitsHint": "아래 두 항목은 이 Routine이 다른 동료에게 넘기는 하위 작업만 제한하며, 자신의 사용량에는 상한을 두지 않습니다."
     },
-    "permissionsLabel": "권한 모드",
-    "permissionAsk": "작업 전 확인",
-    "permissionTrusted": "신뢰된 작업",
     "codexAutomaticCompact": "Codex 파트너는 스스로 맥락을 압축하고 /new 를 써도 지금 작업이 유지됩니다. 정말 새로 시작해야 할 때만 새 작업을 여세요.",
     "chatWelcome": "{{name}}와 채팅",
     "previewHint": "로컬 미리보기 — 아직 실제 Agent로 메시지를 보내지 않습니다.",
@@ -7336,11 +7348,12 @@
     "advancedLinkLabel": "고급 설정",
     "appearanceTitle": "이름과 아바타",
     "persona": {
-      "title": "성격과 일하는 방식",
+      "title": "성격",
       "description": "아래 세 가지 빠른 설정으로 말투, 적극성, 호칭을 조정합니다. 더 자세한 협업 방식은 책임 설명에 적습니다.",
       "freeformPlaceholder": "예: 직설적으로 말하기, 위험은 미리 알리기, 확실하지 않으면 먼저 묻기.",
       "freeformHint": "화면 표시가 아니라 동료 정체성의 일부로 사용됩니다.",
-      "adjustButton": "설정",
+      "addButton": "클릭하여 추가",
+      "adjustButton": "빠른 설정",
       "quickAdjustLabel": "빠른 설정(선택)",
       "stepStyle": "말투",
       "stepProactivity": "적극성",
@@ -7415,6 +7428,7 @@
     },
     "learned": {
       "title": "배운 것",
+      "description": "이 팀원이 작업을 하며 익힌 스킬과 작업 방식입니다.",
       "empty": "아직 익힌 게 없어요 — 몇 가지 맡겨 보세요.",
       "notesTitle": "스스로 적어 둔 방법",
       "deleteTitle": "이 스킬 삭제",
@@ -7433,19 +7447,11 @@
       "hint": "무엇을 적어 두었는지 보기"
     },
     "abilityWall": {
-      "builtinTitle": "기본 탑재",
-      "connectableTitle": "연결할 수 있는 것",
-      "abilities": {
-        "writing": "✍️ 글쓰기와 파일",
-        "research": "🔍 자료 조사",
-        "doing": "🛠 직접 처리",
-        "schedule": "⏰ 예약 작업",
-        "collab": "🤝 동료와 협업"
-      },
-      "connectAccount": "계정 연결",
-      "imBlocked": "한 팀원은 IM을 하나만 연결할 수 있어요 — 먼저 {{channel}} 연결을 끊어주세요",
-      "connectedTitle": "연결됨"
+      "empty": "사용 가능한 IM 연결이 아직 없습니다.",
+      "imBlocked": "한 팀원은 IM을 하나만 연결할 수 있어요 — 먼저 {{channel}} 연결을 끊어주세요"
     },
+    "imConnectionsTitle": "IM 연결",
+    "imConnectionsDescription": "이 팀원에게 실제로 연결된 메시지 계정을 관리합니다.",
     "folders": {
       "addButton": "+ 폴더 추가하기",
       "adding": "추가하는 중…",
@@ -7531,7 +7537,7 @@
       "years": "{{n}}년 전 합류"
     },
     "background": {
-      "title": "책임, 경계, 협업 방식",
+      "title": "책임",
       "edit": "편집",
       "done": "완료",
       "placeholder": "담당할 일, 먼저 추진할 일, 사전 확인이 필요한 결정, 원하는 소통 방식.",

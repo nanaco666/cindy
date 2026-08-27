@@ -6492,6 +6492,10 @@
     "add": "仲間を追加",
     "addTitle": "仲間を追加",
     "addDescription": "まずローカル仲間を作成し、必要に応じて IM チャンネルを追加します。",
+    "createMenu": {
+      "recruit": "例から仲間を招く",
+      "create": "仲間を作成"
+    },
     "createWizard": {
       "createFailed": "仲間を作成できませんでした。もう一度お試しください。",
       "templates": {
@@ -6635,11 +6639,13 @@
     "descriptionPlaceholder": "例：PR 管理、個人アシスタント、プロジェクトパートナー",
     "skillsLabel": "スキル",
     "skillsPlaceholder": "スキル名をカンマで区切って入力",
-    "skillsDescription": "インストール済み Skill の参照だけを保存し、実行時の解決と読み込みはネイティブ機構が行います。",
+    "skillsDescription": "このチームメイトが使用できる Skill を選択します。",
     "skillCatalogLoading": "この Harness で利用できる Skill を読み込んでいます…",
     "skillCatalogError": "Skill を読み込めませんでした。保存済みの選択は保持されます。",
     "skillAllowlistFrozenHint": "ここに固定されています。今後追加されるスキルは自動では入りません。最新に追いつかせるには、上のセレクターを「全体に従う」に切り替えてください。",
     "skillCatalogEmpty": "この Harness とプロジェクトで利用できる Skill はありません。",
+    "skillCatalogExpand": "残り {{count}} 件を表示",
+    "skillCatalogCollapse": "折りたたむ",
     "skillConfiguredUnavailable": "現在利用不可 — 選択して削除",
     "close": "閉じる",
     "avatarPicker": {
@@ -6743,6 +6749,28 @@
     "settingsNav": {
       "title": "設定セクション"
     },
+    "settingsTabs": {
+      "connections": "能力と接続",
+      "growth": "記憶と成長",
+      "model": "モデル",
+      "project": "プロジェクト",
+      "maintenance": "運用メンテナンス"
+    },
+    "model": {
+      "description": "このパートナーが使用するエンジンとモデルを選びます。",
+      "restoreDefault": "デフォルトのモデルに戻す"
+    },
+    "dataManagement": {
+      "title": "データ管理",
+      "exportHint": "この仲間を移行可能な .cindy ファイルとして書き出します。"
+    },
+    "actions": {
+      "message": "メッセージ",
+      "addToGroup": "グループに追加",
+      "export": "エクスポート"
+    },
+    "editProfile": "チームメイトを編集",
+    "editProfileDescription": "チームメイトの役割と説明を更新します。",
     "emptyTitle": "仲間はまだありません",
     "emptyDescription": "役割を決めて仲間を作成し、必要なツールやメッセージ経路を接続できます。",
     "noDescription": "説明はありません",
@@ -6753,8 +6781,6 @@
     "historySession": "履歴タスク",
     "open": "開く",
     "archived": "アーカイブ済み",
-    "sessionLifecycleTitle": "タスクのライフサイクル",
-    "sessionLifecycleDescription": "圧縮は内部コンテキストだけを整理します。メインタスク、メッセージ履歴、パートナーの人格は変わりません。",
     "renew": "コンテキストを圧縮",
     "renewing": "圧縮中…",
     "historyTitle": "アーカイブ履歴",
@@ -6945,10 +6971,6 @@
     "userContextSourceDescription": "あなたについて知っておいてほしいこと。性格や、その子が自分で覚えた内容とは分けて保存され、他の設定と一緒に固定されます。",
     "chooseAvatar": "アバター {{avatar}} を選択",
     "chooseAvatarColor": "アバターの色 {{color}} を選択",
-    "advancedCapabilities": {
-      "title": "これらの能力の裏側にある技術設定",
-      "description": "どのエンジンとモデルで動くか、それに道具とスキル。普段の利用では触る必要はありません。"
-    },
     "memoryRecovery": {
       "title": "この仲間の長期メモリは現在オフです",
       "description": "長期メモリは新しい仲間では常にオンです。この仲間は以前オフにされたため、ここから戻せます。",
@@ -6956,7 +6978,6 @@
     },
     "capabilitiesTitle": "機能",
     "capabilitiesDescription": "タスクが始まるとき、この子が実際に持つ能力です。",
-    "capabilitiesDeferred": "ここでの変更は次のターンで自動反映されます。新しいタスクや履歴の消去は不要です。",
     "profileApply": {
       "title": "設定を保存しました",
       "description": "新しい設定は保存済みですが、今のタスクはまだ以前の設定で動いています。新しいタスクを始めると反映され、今のタスクは履歴に移ります。",
@@ -6965,26 +6986,20 @@
       "saveFailed": "仲間設定を保存できませんでした。変更は適用されていません。",
       "renewFailed": "新しい設定は保存できましたが、新しいタスクを開始できませんでした。今のタスクはそのままです。"
     },
-    "runtimeState": {
-      "saved": "保存済み・起動後に反映",
-      "prepared": "起動設定を準備済み・反映は未確認",
-      "applied": "現在のタスクに反映済み",
-      "pendingRenew": "次のターンで更新待ち",
-      "degraded": "一部の機能が利用不可",
-      "failed": "前回の起動に失敗・未反映"
-    },
     "modelLabel": "モデル",
     "modelUnavailable": "{{model}}（現在利用できません）",
     "harnessLabel": "エンジン",
     "capabilityMode": {
-      "inherit": "現在利用可能な機能を使用",
-      "allowlist": "個別に選択"
+      "inherit": "グローバル設定に従う",
+      "allowlist": "カスタム"
     },
     "capabilityCatalogLoading": "このプロジェクトで利用可能な機能を読み込んでいます…",
     "capabilityCatalogError": "機能カタログを読み込めませんでした。保存済みの選択は保持されます。",
-    "toolsetsLabel": "Cindy ツール",
-    "toolsetCatalogEmpty": "このプロジェクトには設定可能な Cindy ツールがありません。",
-    "mcpServersLabel": "カスタム MCP サーバー",
+    "toolsetsLabel": "Cindy 内蔵ツール",
+    "toolsetsDescription": "このチームメイトが使用できる Cindy 内蔵ツールを選択します。",
+    "toolsetCatalogEmpty": "このプロジェクトには設定可能な Cindy 内蔵ツールがありません。",
+    "mcpServersLabel": "カスタム MCP",
+    "mcpServersDescription": "このチームメイトが使用できるカスタム MCP サーバーを選択します。",
     "mcpCatalogEmpty": "カスタム MCP サーバーはまだ設定されていません。",
     "capabilityApplied": "使用中",
     "capabilityUnavailable": "利用不可",
@@ -7114,9 +7129,6 @@
       },
       "delegateLimitsHint": "以下の 2 つは、この Routine が他の仲間に渡すサブタスクだけを制限し、自身の使用量には上限を設けません。"
     },
-    "permissionsLabel": "権限モード",
-    "permissionAsk": "実行前に確認",
-    "permissionTrusted": "信頼済みの操作",
     "codexAutomaticCompact": "Codex の相棒は自分で文脈を圧縮し、/new でも今のタスクは残ります。本当に仕切り直したいときだけ新しいタスクを始めてください。",
     "chatWelcome": "{{name}} とチャット",
     "previewHint": "ローカルプレビュー — まだ実際の Agent には送信されません。",
@@ -7336,11 +7348,12 @@
     "advancedLinkLabel": "詳細設定",
     "appearanceTitle": "名前とアバター",
     "persona": {
-      "title": "性格と働き方",
+      "title": "性格",
       "description": "下の 3 項目で話し方、積極性、呼び方を素早く調整できます。より詳しい協働方法は責任範囲の欄に記入します。",
       "freeformPlaceholder": "例：率直に話す。リスクは早めに知らせる。分からない時は先に聞く。",
       "freeformHint": "これは表示設定ではなく、仲間のアイデンティティの一部になります。",
-      "adjustButton": "設定",
+      "addButton": "クリックして追加",
+      "adjustButton": "クイック設定",
       "quickAdjustLabel": "クイック設定（任意）",
       "stepStyle": "話し方",
       "stepProactivity": "積極さ",
@@ -7415,6 +7428,7 @@
     },
     "learned": {
       "title": "学んだこと",
+      "description": "このパートナーが仕事を通じて身につけたスキルとやり方です。",
       "empty": "まだ得意なことはありません——いくつか任せてみてください。",
       "notesTitle": "自分用に書きとめたやり方",
       "deleteTitle": "このスキルを削除",
@@ -7433,19 +7447,11 @@
       "hint": "何をメモしたか見る"
     },
     "abilityWall": {
-      "builtinTitle": "標準搭載",
-      "connectableTitle": "接続できるもの",
-      "abilities": {
-        "writing": "✍️ 文章作成・ファイル",
-        "research": "🔍 調べもの",
-        "doing": "🛠 実作業",
-        "schedule": "⏰ スケジュール実行",
-        "collab": "🤝 仲間との連携"
-      },
-      "connectAccount": "アカウントを接続",
-      "imBlocked": "チームメイトが接続できるIMは1つだけです — 先に{{channel}}を切断してください",
-      "connectedTitle": "接続済み"
+      "empty": "利用可能な IM 接続はまだありません。",
+      "imBlocked": "チームメイトが接続できるIMは1つだけです — 先に{{channel}}を切断してください"
     },
+    "imConnectionsTitle": "IM 接続",
+    "imConnectionsDescription": "このチームメイトに実際に接続されているメッセージアカウントを管理します。",
     "folders": {
       "addButton": "+ フォルダーを追加",
       "adding": "追加中…",
@@ -7531,7 +7537,7 @@
       "years": "{{n}} 年前に加入"
     },
     "background": {
-      "title": "責任範囲、境界、協働方法",
+      "title": "責任",
       "edit": "編集",
       "done": "完了",
       "placeholder": "担当すること、自主的に進めること、事前確認が必要な判断、望ましいコミュニケーション方法。",

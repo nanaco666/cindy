@@ -6,7 +6,7 @@ import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { cn } from '@/lib/utils';
 import type { MemoryRecord } from '@cindy/maker-core';
 
-import { BotSettingsBlockHeading, BOT_SETTINGS_BLOCK_CLASS } from './BotSettingsBlock';
+import { BotSettingsBlock } from './BotSettingsBlock';
 
 import { artifactTimeLabel } from './botArtifactPresentation';
 import { partitionBotMemoryRecords } from './botGrowth';
@@ -26,24 +26,8 @@ function parseUpdatedAt(value: string): number | null {
 }
 
 /**
- * 设置页「TA 是谁」里并排的两个成长列表:「TA 记得的」与「TA 学会的」。
- *
- * ## 两个列表、三种东西
- *
- * 「TA 记得的」是伙伴记忆分域里除 `learned-` 之外的分片(见
- * botGrowth.partitionBotMemoryRecords)。
- *
- * 「TA 学会的」列的是**真技能**(批次 ζ):伙伴自己调 `save_bot_skill` 存下的
- * `SKILL.md`,下一次会话会被 harness 真正挂载。它们和记忆不在同一套存储里,所以
- * 这里要拉两份数据。
- *
- * `learned-` 前缀的记忆分片(批次 ε 的做法)继续留在同一个区块的下半段,标成
- * 「笔记」—— 它们是伙伴写给自己看的做法,不是可挂载的技能。老数据一条不丢,但
- * 视觉上必须能一眼看出「这条是能用的本事,那条只是一段笔记」。
- *
- * 两份数据在同一个组件里拉,删除后一起刷新 —— 分两个组件各拉一次会出现
- * 「删了一条,另一个列表还是旧的」。`digest` 分片(Pi 压缩产生的系统内部摘要)
- * 两边都不展示,但不影响它继续被检索使用。
+ * “记得的”展示普通记忆分片；“学会的”展示可挂载 Skill 和兼容旧数据的
+ * `learned-` 笔记。两份数据共用刷新周期，`digest` 系统摘要不展示。
  */
 export function BotGrowthLists({
   botId,
@@ -230,8 +214,7 @@ export function BotGrowthLists({
   const hasSeedMemory = (records ?? []).some((record) => isBotSeedMemorySlug(record.slug));
   // 已经加载完、模板确实定义了开场笔记、但一条都没落地 —— 只有这三条同时成立才
   // 提供补写入口。records 还没回来时不显示:那会在每次进设置页时闪一下。
-  const canSeedBack =
-    records !== null && !hasSeedMemory && (seedEntries?.length ?? 0) > 0;
+  const canSeedBack = records !== null && !hasSeedMemory && (seedEntries?.length ?? 0) > 0;
 
   const renderRow = (record: MemoryRecord, withTime: boolean) => {
     const at = withTime ? parseUpdatedAt(record.frontmatter.updatedAt) : null;
@@ -298,7 +281,9 @@ export function BotGrowthLists({
               <ChevronRight size={13} className="mt-0.5 shrink-0 text-[var(--text-tertiary)]" />
             )}
             <span className="min-w-0">
-              <span className="block truncate text-12 text-[var(--text-primary)]">{skill.name}</span>
+              <span className="block truncate text-12 text-[var(--text-primary)]">
+                {skill.name}
+              </span>
               {metaLine ? (
                 <span className="mt-0.5 block truncate text-11 text-[var(--text-tertiary)]">
                   {metaLine}
@@ -330,45 +315,27 @@ export function BotGrowthLists({
   const highlightRing = (id: BotSettingsHighlightId): string | false =>
     highlight === id && 'ring-2 ring-[var(--focus-ring-soft)]';
 
-  /*
-    两个列表各自成为页面上的一个区块,而不是挤在「TA 是谁」那张卡的下半截。
-
-    原来「TA 是谁」一张卡里装了六件事(头像名字 / 性格 / 背景设定 / 记得的 /
-    学会的),而隔壁「TA 懂的」整张卡只有一个按钮 —— 卡片规格一样重,信息量差六倍,
-    页面读起来就是上面一坨、下面空荡。现在每张卡只讲一件事,四块变六块但每块都
-    更短,而且「TA 记得的 / TA 学会的」跟「TA 会的 / TA 懂的」本来就是同一个句式,
-    并进这一排是它们本来该在的位置。
-
-    两份数据仍在同一个组件里拉、删除后一起刷新(分成两个组件会出现「删了一条,
-    另一个列表还是旧的」),只是渲染成两个并列的外壳。
-  */
   return (
     <>
-      <section
-        data-testid="bot-memory-list"
-        className={cn(BOT_SETTINGS_BLOCK_CLASS, highlightRing('memory'))}
+      <BotSettingsBlock
+        testId="bot-memory-list"
+        className={cn(highlightRing('memory'))}
+        icon={BookMarked}
+        title={t('bots.memoryList.title')}
+        hint={hasSeedMemory ? t('bots.memoryList.footnoteWithSeed') : t('bots.memoryList.footnote')}
+        action={
+          records && records.length > 0 ? (
+            <button
+              type="button"
+              disabled={clearing}
+              onClick={() => void clearAll()}
+              className="text-11 text-[var(--text-tertiary)] hover:text-[var(--text-danger)] disabled:opacity-50"
+            >
+              {clearing ? t('bots.memoryList.clearing') : t('bots.memoryList.clearAll')}
+            </button>
+          ) : null
+        }
       >
-        <BotSettingsBlockHeading
-          icon={BookMarked}
-          title={t('bots.memoryList.title')}
-          /* 这句回答的是「这些东西是谁放进来的、我能不能动」——列表本身答不了,
-             所以它常驻。但它跟着标题走,不再自己占一整行。 */
-          hint={
-            hasSeedMemory ? t('bots.memoryList.footnoteWithSeed') : t('bots.memoryList.footnote')
-          }
-          action={
-            records && records.length > 0 ? (
-              <button
-                type="button"
-                disabled={clearing}
-                onClick={() => void clearAll()}
-                className="text-11 text-[var(--text-tertiary)] hover:text-[var(--text-danger)] disabled:opacity-50"
-              >
-                {clearing ? t('bots.memoryList.clearing') : t('bots.memoryList.clearAll')}
-              </button>
-            ) : null
-          }
-        />
         {error ? <p className="mt-3 text-11 text-[var(--text-danger)]">{error}</p> : null}
         {records === null ? null : memories.length === 0 ? (
           <p className="mt-3 text-11 leading-4 text-[var(--text-tertiary)]">
@@ -389,24 +356,18 @@ export function BotGrowthLists({
             {seeding ? t('bots.memoryList.seedingBack') : t('bots.memoryList.seedBack')}
           </button>
         ) : null}
-      </section>
+      </BotSettingsBlock>
 
-      {/* 「TA 学会的」与「TA 记得的」并列:记忆是你说过的,本事是 TA 做出来的。 */}
-      <section
-        data-testid="bot-learned-list"
-        className={cn(BOT_SETTINGS_BLOCK_CLASS, highlightRing('learned'))}
+      <BotSettingsBlock
+        testId="bot-learned-list"
+        className={cn(highlightRing('learned'))}
+        icon={GraduationCap}
+        title={t('bots.learned.title')}
+        hint={t('bots.learned.description')}
       >
-        {/*
-          空的时候不给 hint:原来的脚注「TA 会从做过的事里自己长本事,用得越多越
-          顺手」和空态那句「还没长出什么本事——多让 TA 做几件事」说的是同一件事,
-          留一句就够。有内容时更不需要 —— 用户看着列表,不必再被讲一遍它是什么。
-        */}
-        <BotSettingsBlockHeading icon={GraduationCap} title={t('bots.learned.title')} />
-        {/*
-          两组都空才说「还没长出什么本事」。技能已经有了、只是没有笔记(反之亦然)
-          时说这句就是对着一个非空列表讲假话。
-        */}
-        {skills === null || records === null ? null : skills.length === 0 && learned.length === 0 ? (
+        {/* 仅当 Skill 和兼容笔记都为空时显示空态。 */}
+        {skills === null || records === null ? null : skills.length === 0 &&
+          learned.length === 0 ? (
           <p className="mt-3 text-11 leading-4 text-[var(--text-tertiary)]">
             {t('bots.learned.empty')}
           </p>
@@ -416,11 +377,7 @@ export function BotGrowthLists({
             {skills.map(renderSkillRow)}
           </ul>
         ) : null}
-        {/*
-          `learned-` 记忆分片是批次 ε 的做法:伙伴写给自己看的一段笔记,不会被
-          harness 挂载。老数据一条不丢,但必须和上面那组真技能分开标注 ——
-          不然用户会以为每一条都是「能用的本事」。
-        */}
+        {/* `learned-` 旧记忆不是可挂载 Skill，单独标为笔记。 */}
         {records && learned.length > 0 ? (
           <div data-testid="bot-learned-notes" className="mt-4">
             <p className="text-11 text-[var(--text-tertiary)]">{t('bots.learned.notesTitle')}</p>
@@ -429,7 +386,7 @@ export function BotGrowthLists({
             </ul>
           </div>
         ) : null}
-      </section>
+      </BotSettingsBlock>
     </>
   );
 }

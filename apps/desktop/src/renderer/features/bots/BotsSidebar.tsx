@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Bot,
@@ -27,6 +27,7 @@ import { useSidebarCollapsedState, useRegisterSidebarUpper } from '../feature-co
 import type { BotInboxItemView } from '../../../shared/botSessionEvents';
 import { BotAvatar } from './BotAvatar';
 import { BotGroupAvatar } from './BotGroupAvatar';
+import { BotCreateMenu } from './BotCreateMenu';
 import {
   botListSubtitle,
   botListTimestampAt,
@@ -83,6 +84,26 @@ function BotsSidebarContent() {
   const [menuBotId, setMenuBotId] = useState<string | null>(null);
   const [groupRows, setGroupRows] = useState<Record<string, { summary: string; unread: number }>>({});
   const [groupSummaryVersion, setGroupSummaryVersion] = useState(0);
+  const contextMenuFrameRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (contextMenuFrameRef.current !== null) {
+        window.cancelAnimationFrame(contextMenuFrameRef.current);
+      }
+    },
+    [],
+  );
+
+  const openBotContextMenu = (id: string) => {
+    if (contextMenuFrameRef.current !== null) {
+      window.cancelAnimationFrame(contextMenuFrameRef.current);
+    }
+    contextMenuFrameRef.current = window.requestAnimationFrame(() => {
+      contextMenuFrameRef.current = null;
+      setMenuBotId(id);
+    });
+  };
 
   /*
     「正在输入…」的信号来源：灵动岛活动镜像(state/agentIslandActivity)。
@@ -254,14 +275,7 @@ function BotsSidebarContent() {
         >
           <Bot size={16} />
         </button>
-        <button
-          type="button"
-          onClick={() => navigate('/bots/roster')}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--sidebar-nav-text)] hover:bg-sidebar-item-hover"
-          aria-label={t('bots.add')}
-        >
-          <Plus size={16} />
-        </button>
+        <BotCreateMenu compact />
         <button
           type="button"
           onClick={() => navigate('/bots/groups')}
@@ -293,14 +307,7 @@ function BotsSidebarContent() {
               {showHidden ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => navigate('/bots/roster')}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--sidebar-list-muted)] transition-colors hover:bg-sidebar-item-hover hover:text-[var(--sidebar-nav-text)]"
-            aria-label={t('bots.add')}
-          >
-            <Plus size={15} />
-          </button>
+          <BotCreateMenu />
         </span>
       </div>
 
@@ -391,7 +398,7 @@ function BotsSidebarContent() {
                   key={bot.id}
                   onContextMenu={(event) => {
                     event.preventDefault();
-                    setMenuBotId(bot.id);
+                    openBotContextMenu(bot.id);
                   }}
                   className={cn(
                     'group relative flex w-full items-center rounded-xl transition-colors',

@@ -26,6 +26,7 @@ import type {
 import type { ConversationSearchResponse } from '../../../shared/conversationSearch';
 import type { BotProfile } from './botStore';
 import { runBotLifecycleAction } from './botStore';
+import { BotSettingsBlock } from './BotSettingsBlock';
 
 function healthIcon(status: BotHealthReport['status']) {
   if (status === 'healthy') return <CheckCircle2 size={16} className="text-[var(--status-success)]" />;
@@ -185,17 +186,11 @@ export function BotLifecycleSettings({
   };
 
   return (
-    <section className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-14 font-medium text-[var(--text-primary)]">
-            <Activity size={16} />
-            {t('bots.lifecycle.title')}
-          </div>
-          <p className="mt-1 text-12 leading-5 text-[var(--text-secondary)]">
-            {t('bots.lifecycle.description')}
-          </p>
-        </div>
+    <BotSettingsBlock
+      icon={Activity}
+      title={t('bots.lifecycle.title')}
+      hint={t('bots.lifecycle.description')}
+      action={
         <button
           type="button"
           onClick={() => void load()}
@@ -205,7 +200,8 @@ export function BotLifecycleSettings({
         >
           <RefreshCcw size={14} className={loading ? 'animate-spin' : undefined} />
         </button>
-      </div>
+      }
+    >
 
       <div className="mt-4 rounded-xl border border-[var(--border-default)] p-4">
         <div className="flex items-start gap-3">
@@ -593,6 +589,6 @@ export function BotLifecycleSettings({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-    </section>
+    </BotSettingsBlock>
   );
 }

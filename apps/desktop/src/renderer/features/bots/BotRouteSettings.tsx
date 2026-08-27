@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Archive, CirclePause, CirclePlay, MessageSquarePlus, Route } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { BotSettingsBlock } from './BotSettingsBlock';
 import {
   setBotRouteStatus,
   upsertBotRoute,
@@ -139,9 +140,10 @@ export function BotRouteSettings({
 }) {
   const { t } = useTranslation();
   const availableChannels = useMemo(
-    () => (bot.channels ?? []).filter(
-      (item) => item.enabled && item.kind !== 'local' && item.kind !== 'x',
-    ),
+    () =>
+      (bot.channels ?? []).filter(
+        (item) => item.enabled && item.kind !== 'local' && item.kind !== 'x',
+      ),
     [bot.channels],
   );
   const activeProjects = useMemo(
@@ -195,17 +197,11 @@ export function BotRouteSettings({
   const visibleRoutes = (bot.routes ?? []).filter((route) => route.status !== 'archived');
 
   return (
-    <section className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-14 font-medium text-[var(--text-primary)]">
-            <Route size={16} />
-            {t('bots.routes.title')}
-          </div>
-          <p className="mt-1 text-12 leading-5 text-[var(--text-secondary)]">
-            {t('bots.routes.description')}
-          </p>
-        </div>
+    <BotSettingsBlock
+      icon={Route}
+      title={t('bots.routes.title')}
+      hint={t('bots.routes.description')}
+      action={
         <button
           type="button"
           disabled={availableChannels.length === 0}
@@ -215,8 +211,8 @@ export function BotRouteSettings({
           <MessageSquarePlus size={13} />
           {t('bots.routes.add')}
         </button>
-      </div>
-
+      }
+    >
       {availableChannels.length === 0 ? (
         <p className="mt-3 rounded-xl border border-dashed border-[var(--border-default)] px-3 py-3 text-12 text-[var(--text-tertiary)]">
           {t('bots.routes.mountChannelFirst')}
@@ -322,6 +318,6 @@ export function BotRouteSettings({
           ))}
         </div>
       )}
-    </section>
+    </BotSettingsBlock>
   );
 }

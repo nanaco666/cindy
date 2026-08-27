@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Package, Puzzle, ServerCog, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import { BuiltinToolRow } from '@/components/settings/BuiltinToolsSection';
 import { listCustomMcpServers } from '@/lib/customMcpServers';
 import * as sessionService from '@/lib/sessionService';
 import { cn } from '@/lib/utils';
@@ -13,6 +14,7 @@ import {
   type BotProfile,
   type BotSessionProjection,
 } from './botStore';
+import { BotSettingsBlock } from './BotSettingsBlock';
 
 interface BotSkillOption {
   name: string;
@@ -36,6 +38,8 @@ interface BotMcpOption {
 
 type CatalogState = 'loading' | 'ready' | 'error';
 
+const COLLAPSED_SKILL_LIMIT = 8;
+
 function runtimeAgentKindForHarness(
   harness: BotCapabilities['harness'],
 ): 'claude-code' | 'codex' | 'pi' {
@@ -50,8 +54,16 @@ function readStringList(value: unknown): string[] {
 
 function SelectionMark({ selected }: { selected: boolean }) {
   return (
-    <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-[var(--border-default)]">
-      {selected ? <Check size={12} /> : null}
+    <span
+      className={cn(
+        'mt-1 flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors',
+        selected
+          ? 'border-[var(--focus-ring)] bg-[var(--focus-ring)] text-white'
+          : 'border-[var(--border-default)] bg-[var(--surface-elevated)] text-transparent',
+      )}
+      aria-hidden="true"
+    >
+      <Check size={13} strokeWidth={2.25} />
     </span>
   );
 }
@@ -100,9 +112,11 @@ export function BotCapabilitySettings({
   const [skillState, setSkillState] = useState<CatalogState>('loading');
   const [toolsetState, setToolsetState] = useState<CatalogState>('loading');
   const [mcpState, setMcpState] = useState<CatalogState>('loading');
+  const [skillsExpanded, setSkillsExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setSkillsExpanded(false);
     setSkillState('loading');
     setToolsetState('loading');
     setMcpState('loading');
@@ -186,6 +200,21 @@ export function BotCapabilitySettings({
     () => new Set(readStringList(resolved?.unavailableMcpServers)),
     [resolved],
   );
+  const uniqueSkillCatalog = useMemo(() => {
+    const byReference = new Map<string, BotSkillOption>();
+    for (const skill of skillCatalog) {
+      const reference = skill.runtimeCommandName?.trim() || skill.name;
+      const previous = byReference.get(reference);
+      if (!previous || (!previous.description && skill.description)) {
+        byReference.set(reference, skill);
+      }
+    }
+    return [...byReference.values()];
+  }, [skillCatalog]);
+  const visibleSkillCatalog = skillsExpanded
+    ? uniqueSkillCatalog
+    : uniqueSkillCatalog.slice(0, COLLAPSED_SKILL_LIMIT);
+  const hiddenSkillCount = Math.max(0, uniqueSkillCatalog.length - COLLAPSED_SKILL_LIMIT);
 
   const updateCapability = <K extends keyof BotCapabilities>(key: K, value: BotCapabilities[K]) =>
     onCapabilitiesChange({ ...capabilities, [key]: value });
@@ -218,13 +247,17 @@ export function BotCapabilitySettings({
     );
   };
 
-  const toggleToolset = (id: string) => {
+  const toggleToolset = (id: string, enabled: boolean) => {
     const inherited = toolsetCatalog.filter((item) => item.effectiveEnabled).map((item) => item.id);
     const current = capabilities.toolsetMode === 'inherit' ? inherited : capabilities.toolsets;
     onCapabilitiesChange({
       ...capabilities,
       toolsetMode: 'allowlist',
-      toolsets: current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+      toolsets: enabled
+        ? current.includes(id)
+          ? current
+          : [...current, id]
+        : current.filter((item) => item !== id),
     });
   };
 
@@ -245,10 +278,12 @@ export function BotCapabilitySettings({
   };
 
   return (
-    <div className="mt-4 flex flex-col gap-5">
-      <div className="flex flex-col gap-2 text-12 text-[var(--text-secondary)]">
-        <div className="flex items-center justify-between gap-3">
-          <span>{t('bots.skillsLabel')}</span>
+    <>
+      <BotSettingsBlock
+        icon={Sparkles}
+        title={t('bots.skillsLabel')}
+        hint={t('bots.skillsDescription')}
+        action={
           <CapabilityModeSelect
             value={capabilities.skillMode}
             onChange={(mode) => {
@@ -256,8 +291,10 @@ export function BotCapabilitySettings({
               if (mode === 'inherit') onSelectedSkillsChange([]);
             }}
           />
-        </div>
-        {/*
+        }
+      >
+        <div className="flex flex-col gap-2 text-12 text-[var(--text-secondary)]">
+          {/*
           白名单模式是「钉死这几项」—— 以后新增的技能不会进来。这本身是合法选择,
           但用户看不出自己处在这个状态:界面上它和「跟随全局」长得一模一样,只是
           某几个格子没亮。
@@ -270,83 +307,109 @@ export function BotCapabilitySettings({
           同 Hermes 的 routineFilterHint(plugin.js 10150+):存储里明明有东西却什么
           都没显示时,说清楚为什么、以及怎么办,而不是留一个让人发呆的空态。
         */}
-        {capabilities.skillMode === 'allowlist' && skillState === 'ready' ? (
-          <p className="text-[var(--text-tertiary)]">{t('bots.skillAllowlistFrozenHint')}</p>
-        ) : null}
-        {skillState !== 'ready' || skillCatalog.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[var(--border-default)] px-3 py-3 text-[var(--text-tertiary)]">
-            {catalogMessage(skillState, 'bots.skillCatalogEmpty')}
-          </p>
-        ) : (
-          <div className="grid gap-2 md:grid-cols-2">
-            {skillCatalog.map((skill) => {
-              const reference = skill.runtimeCommandName?.trim() || skill.name;
-              // 跟随全局时默认全亮,被明确关掉的那几项熄灭;白名单模式仍按选中集算。
-              const selected =
-                capabilities.skillMode === 'inherit'
-                  ? !capabilities.skillsExcluded.includes(reference)
-                  : selectedSkills.includes(reference);
-              return (
-                <button
-                  type="button"
-                  key={`${skill.name}:${reference}`}
-                  onClick={() => toggleSkill(reference)}
-                  className={cn(
-                    'flex min-h-12 items-start gap-2 rounded-xl border px-3 py-2 text-left',
-                    selected
-                      ? 'border-[var(--focus-ring-soft)] bg-[var(--surface-chip)]'
-                      : 'border-[var(--border-default)] hover:bg-[var(--surface-hover)]',
-                  )}
-                >
-                  <SelectionMark selected={selected} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-12 font-medium text-[var(--text-primary)]">
-                      {skill.name}
+          {capabilities.skillMode === 'allowlist' && skillState === 'ready' ? (
+            <p className="text-[var(--text-tertiary)]">{t('bots.skillAllowlistFrozenHint')}</p>
+          ) : null}
+          {skillState !== 'ready' || skillCatalog.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-[var(--border-default)] px-3 py-3 text-[var(--text-tertiary)]">
+              {catalogMessage(skillState, 'bots.skillCatalogEmpty')}
+            </p>
+          ) : (
+            <div
+              className={cn(
+                'grid grid-cols-1 gap-3 md:grid-cols-2',
+                skillsExpanded && 'max-h-[360px] overflow-y-auto pr-1 [scrollbar-gutter:stable]',
+              )}
+            >
+              {visibleSkillCatalog.map((skill) => {
+                const reference = skill.runtimeCommandName?.trim() || skill.name;
+                // 跟随全局时默认全亮,被明确关掉的那几项熄灭;白名单模式仍按选中集算。
+                const selected =
+                  capabilities.skillMode === 'inherit'
+                    ? !capabilities.skillsExcluded.includes(reference)
+                    : selectedSkills.includes(reference);
+                return (
+                  <button
+                    type="button"
+                    key={`${skill.name}:${reference}`}
+                    onClick={() => toggleSkill(reference)}
+                    aria-pressed={selected}
+                    className={cn(
+                      'group flex min-h-[64px] w-full items-start gap-3 rounded-[12px] border-[0.5px] border-[var(--border-default)] px-3 py-2.5 text-left',
+                      'bg-[var(--surface-elevated)] shadow-[var(--plugin-card-shadow)]',
+                      'transition-[background-color,border-color,transform] duration-150 ease-out',
+                      'hover:-translate-y-0.5 hover:border-[var(--text-tertiary)]',
+                      'active:translate-y-0 active:scale-[0.992]',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+                    )}
+                  >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-[22%] border-[0.5px] border-[var(--border-default)] bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-[var(--plugin-card-shadow)]">
+                      <Package size={17} strokeWidth={1.75} />
                     </span>
-                    {skill.description ? (
-                      <span className="mt-0.5 block line-clamp-2 text-11 leading-4 text-[var(--text-tertiary)]">
-                        {skill.description}
+                    <span className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
+                      <span className="block truncate text-13 font-medium text-[var(--text-primary)]">
+                        {skill.name}
+                      </span>
+                      {skill.description ? (
+                        <span className="block truncate text-12 leading-4 text-[var(--text-secondary)]">
+                          {skill.description}
+                        </span>
+                      ) : null}
+                    </span>
+                    {appliedSkills.has(reference) ? (
+                      <span className="mt-1 shrink-0 text-10 text-[var(--text-tertiary)]">
+                        {t('bots.capabilityApplied')}
                       </span>
                     ) : null}
-                  </span>
-                  {appliedSkills.has(reference) ? (
-                    <span className="text-10 text-[var(--text-tertiary)]">
-                      {t('bots.capabilityApplied')}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {selectedSkills
-          .filter(
-            (name) =>
-              !skillCatalog.some(
-                (skill) => skill.name === name || skill.runtimeCommandName === name,
-              ),
-          )
-          .map((name) => (
+                    <SelectionMark selected={selected} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {hiddenSkillCount > 0 ? (
             <button
               type="button"
-              key={name}
-              onClick={() => toggleSkill(name)}
-              className="flex items-center justify-between rounded-lg border border-[var(--border-default)] px-3 py-2 text-left text-11 text-[var(--text-secondary)]"
+              onClick={() => setSkillsExpanded((expanded) => !expanded)}
+              aria-expanded={skillsExpanded}
+              className="inline-flex h-8 w-fit items-center gap-1.5 rounded-lg px-2 text-11 text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
             >
-              <span className="truncate">{name}</span>
-              <span className="shrink-0 text-[var(--text-tertiary)]">
-                {unavailableSkills.has(name)
-                  ? t('bots.capabilityUnavailable')
-                  : t('bots.skillConfiguredUnavailable')}
-              </span>
+              {skillsExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              {skillsExpanded
+                ? t('bots.skillCatalogCollapse')
+                : t('bots.skillCatalogExpand', { count: hiddenSkillCount })}
             </button>
-          ))}
-        <span className="text-11 text-[var(--text-tertiary)]">{t('bots.skillsDescription')}</span>
-      </div>
+          ) : null}
+          {selectedSkills
+            .filter(
+              (name) =>
+                !skillCatalog.some(
+                  (skill) => skill.name === name || skill.runtimeCommandName === name,
+                ),
+            )
+            .map((name) => (
+              <button
+                type="button"
+                key={name}
+                onClick={() => toggleSkill(name)}
+                className="flex items-center justify-between rounded-lg border border-[var(--border-default)] px-3 py-2 text-left text-11 text-[var(--text-secondary)]"
+              >
+                <span className="truncate">{name}</span>
+                <span className="shrink-0 text-[var(--text-tertiary)]">
+                  {unavailableSkills.has(name)
+                    ? t('bots.capabilityUnavailable')
+                    : t('bots.skillConfiguredUnavailable')}
+                </span>
+              </button>
+            ))}
+        </div>
+      </BotSettingsBlock>
 
-      <div className="flex flex-col gap-2 text-12 text-[var(--text-secondary)]">
-        <div className="flex items-center justify-between gap-3">
-          <span>{t('bots.toolsetsLabel')}</span>
+      <BotSettingsBlock
+        icon={Puzzle}
+        title={t('bots.toolsetsLabel')}
+        hint={t('bots.toolsetsDescription')}
+        action={
           <CapabilityModeSelect
             value={capabilities.toolsetMode}
             onChange={(mode) =>
@@ -357,72 +420,66 @@ export function BotCapabilitySettings({
               })
             }
           />
-        </div>
-        {toolsetState !== 'ready' || toolsetCatalog.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[var(--border-default)] px-3 py-3 text-[var(--text-tertiary)]">
-            {catalogMessage(toolsetState, 'bots.toolsetCatalogEmpty')}
-          </p>
-        ) : (
-          <div className="grid gap-2 md:grid-cols-2">
-            {toolsetCatalog.map((toolset) => {
-              const selected =
-                capabilities.toolsetMode === 'inherit'
-                  ? toolset.effectiveEnabled
-                  : capabilities.toolsets.includes(toolset.id);
-              return (
-                <button
-                  type="button"
-                  key={toolset.id}
-                  disabled={!toolset.effectiveEnabled}
-                  onClick={() => toggleToolset(toolset.id)}
-                  className={cn(
-                    'flex min-h-12 items-start gap-2 rounded-xl border px-3 py-2 text-left disabled:cursor-not-allowed disabled:opacity-55',
-                    selected
-                      ? 'border-[var(--focus-ring-soft)] bg-[var(--surface-chip)]'
-                      : 'border-[var(--border-default)] hover:bg-[var(--surface-hover)]',
-                  )}
-                >
-                  <SelectionMark selected={selected} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-12 font-medium text-[var(--text-primary)]">
-                      {toolset.name}
-                    </span>
-                    <span className="mt-0.5 block line-clamp-2 text-11 leading-4 text-[var(--text-tertiary)]">
-                      {toolset.effectiveEnabled
+        }
+      >
+        <div className="flex flex-col gap-2 text-12 text-[var(--text-secondary)]">
+          {toolsetState !== 'ready' || toolsetCatalog.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-[var(--border-default)] px-3 py-3 text-[var(--text-tertiary)]">
+              {catalogMessage(toolsetState, 'bots.toolsetCatalogEmpty')}
+            </p>
+          ) : (
+            <div className="flex flex-col overflow-hidden rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)]">
+              {toolsetCatalog.map((toolset, index) => {
+                const selected =
+                  capabilities.toolsetMode === 'inherit'
+                    ? toolset.effectiveEnabled
+                    : capabilities.toolsets.includes(toolset.id);
+                return (
+                  <BuiltinToolRow
+                    key={toolset.id}
+                    plugin={{
+                      ...toolset,
+                      description: toolset.effectiveEnabled
                         ? toolset.description
-                        : t('bots.capabilityDisabledBySystem')}
-                    </span>
-                  </span>
-                  {appliedToolsets.has(toolset.id) ? (
-                    <span className="text-10 text-[var(--text-tertiary)]">
-                      {t('bots.capabilityApplied')}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {capabilities.toolsets
-          .filter((id) => !toolsetCatalog.some((item) => item.id === id))
-          .map((id) => (
-            <div
-              key={id}
-              className="flex items-center justify-between rounded-lg border border-[var(--border-default)] px-3 py-2 text-11 text-[var(--text-secondary)]"
-            >
-              <span className="truncate">{id}</span>
-              <span className="shrink-0 text-[var(--text-tertiary)]">
-                {unavailableToolsets.has(id)
-                  ? t('bots.capabilityUnavailable')
-                  : t('bots.capabilityNotInstalled')}
-              </span>
+                        : t('bots.capabilityDisabledBySystem'),
+                    }}
+                    divider={index > 0}
+                    disabled={!toolset.effectiveEnabled}
+                    projectScope={false}
+                    checked={selected}
+                    showSource={false}
+                    badge={
+                      appliedToolsets.has(toolset.id) ? t('bots.capabilityApplied') : undefined
+                    }
+                    onToggle={(id, next) => toggleToolset(id, next)}
+                  />
+                );
+              })}
             </div>
-          ))}
-      </div>
+          )}
+          {capabilities.toolsets
+            .filter((id) => !toolsetCatalog.some((item) => item.id === id))
+            .map((id) => (
+              <div
+                key={id}
+                className="flex items-center justify-between rounded-lg border border-[var(--border-default)] px-3 py-2 text-11 text-[var(--text-secondary)]"
+              >
+                <span className="truncate">{id}</span>
+                <span className="shrink-0 text-[var(--text-tertiary)]">
+                  {unavailableToolsets.has(id)
+                    ? t('bots.capabilityUnavailable')
+                    : t('bots.capabilityNotInstalled')}
+                </span>
+              </div>
+            ))}
+        </div>
+      </BotSettingsBlock>
 
-      <div className="flex flex-col gap-2 text-12 text-[var(--text-secondary)]">
-        <div className="flex items-center justify-between gap-3">
-          <span>{t('bots.mcpServersLabel')}</span>
+      <BotSettingsBlock
+        icon={ServerCog}
+        title={t('bots.mcpServersLabel')}
+        hint={t('bots.mcpServersDescription')}
+        action={
           <CapabilityModeSelect
             value={capabilities.mcpMode}
             onChange={(mode) =>
@@ -433,72 +490,63 @@ export function BotCapabilitySettings({
               })
             }
           />
-        </div>
-        {mcpState !== 'ready' || mcpCatalog.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[var(--border-default)] px-3 py-3 text-[var(--text-tertiary)]">
-            {catalogMessage(mcpState, 'bots.mcpCatalogEmpty')}
-          </p>
-        ) : (
-          <div className="grid gap-2 md:grid-cols-2">
-            {mcpCatalog.map((server) => {
-              const selected =
-                capabilities.mcpMode === 'inherit' || capabilities.mcpServers.includes(server.id);
-              return (
-                <button
-                  type="button"
-                  key={server.id}
-                  onClick={() => toggleMcp(server.id)}
-                  className={cn(
-                    'flex min-h-10 items-center gap-2 rounded-xl border px-3 py-2 text-left',
-                    selected
-                      ? 'border-[var(--focus-ring-soft)] bg-[var(--surface-chip)]'
-                      : 'border-[var(--border-default)] hover:bg-[var(--surface-hover)]',
-                  )}
-                >
-                  <SelectionMark selected={selected} />
-                  <span className="min-w-0 flex-1 truncate text-12 font-medium text-[var(--text-primary)]">
-                    {server.name}
-                  </span>
-                  {appliedMcpServers.has(server.id) ? (
-                    <span className="text-10 text-[var(--text-tertiary)]">
-                      {t('bots.capabilityApplied')}
+        }
+      >
+        <div className="flex flex-col gap-2 text-12 text-[var(--text-secondary)]">
+          {mcpState !== 'ready' || mcpCatalog.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-[var(--border-default)] px-3 py-3 text-[var(--text-tertiary)]">
+              {catalogMessage(mcpState, 'bots.mcpCatalogEmpty')}
+            </p>
+          ) : (
+            <div className="grid gap-2 md:grid-cols-2">
+              {mcpCatalog.map((server) => {
+                const selected =
+                  capabilities.mcpMode === 'inherit' || capabilities.mcpServers.includes(server.id);
+                return (
+                  <button
+                    type="button"
+                    key={server.id}
+                    onClick={() => toggleMcp(server.id)}
+                    className={cn(
+                      'flex min-h-10 items-center gap-2 rounded-xl border px-3 py-2 text-left',
+                      selected
+                        ? 'border-[var(--focus-ring-soft)] bg-[var(--surface-chip)]'
+                        : 'border-[var(--border-default)] hover:bg-[var(--surface-hover)]',
+                    )}
+                  >
+                    <SelectionMark selected={selected} />
+                    <span className="min-w-0 flex-1 truncate text-12 font-medium text-[var(--text-primary)]">
+                      {server.name}
                     </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {capabilities.mcpServers
-          .filter((id) => !mcpCatalog.some((item) => item.id === id))
-          .map((id) => (
-            <div
-              key={id}
-              className="flex items-center justify-between rounded-lg border border-[var(--border-default)] px-3 py-2 text-11 text-[var(--text-secondary)]"
-            >
-              <span className="truncate">{id}</span>
-              <span className="shrink-0 text-[var(--text-tertiary)]">
-                {unavailableMcpServers.has(id)
-                  ? t('bots.capabilityUnavailable')
-                  : t('bots.capabilityNotInstalled')}
-              </span>
+                    {appliedMcpServers.has(server.id) ? (
+                      <span className="text-10 text-[var(--text-tertiary)]">
+                        {t('bots.capabilityApplied')}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
             </div>
-          ))}
-      </div>
+          )}
+          {capabilities.mcpServers
+            .filter((id) => !mcpCatalog.some((item) => item.id === id))
+            .map((id) => (
+              <div
+                key={id}
+                className="flex items-center justify-between rounded-lg border border-[var(--border-default)] px-3 py-2 text-11 text-[var(--text-secondary)]"
+              >
+                <span className="truncate">{id}</span>
+                <span className="shrink-0 text-[var(--text-tertiary)]">
+                  {unavailableMcpServers.has(id)
+                    ? t('bots.capabilityUnavailable')
+                    : t('bots.capabilityNotInstalled')}
+                </span>
+              </div>
+            ))}
+        </div>
+      </BotSettingsBlock>
 
-      {/*
-        长期记忆开关与「定时干活」勾选框不在这里了:记忆是伙伴的底层能力(恒开,
-        只在高级 tab 为历史关闭态留一个恢复入口),自动化是标配(不再是开关)。
-        本面板只保留真正需要专家逐项挑选的技术细节。
-
-        「其它任务权限」(capabilities.sessionControlMode)的下拉也下线了 ——
-        产品裁决 2026-08-19:**协作是标配,不存在「不可被召唤的伙伴」**。那个
-        下拉的默认值写着「不可访问」,而真实的委派链路(botDelegationService)
-        从来不查它,用户看到的是一个与行为矛盾的假开关。
-        字段本身**保留不动**:它只驱动 buildBotSessionControlContext 往 system 段
-        写「你能不能主动去动别的任务」这段话(阿枢/本本靠它订阅并处理其它任务的
-        事件),存量伙伴的取值原样生效,不做迁移、不改语义。
-      */}
-    </div>
+      {/* 记忆恢复在“记忆和成长”；自动化和协作不在此处提供重复开关。 */}
+    </>
   );
 }

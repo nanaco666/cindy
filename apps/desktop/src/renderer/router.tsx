@@ -125,6 +125,10 @@ export const router = createHashRouter([
                       // 之前(React Router 也按静态优先定级),所以 /bots/roster 不会
                       // 被当成一个叫 "roster" 的伙伴。
                       { path: 'roster', element: <BotRosterView /> },
+                      {
+                        path: 'roster/examples',
+                        element: <BotRosterView initialView="templates" />,
+                      },
                       { path: 'groups', element: <BotGroupRoomsHome /> },
                       { path: 'groups/:roomId', element: <BotGroupRoomView /> },
                       { path: ':botId', element: <BotsHomeView /> },
