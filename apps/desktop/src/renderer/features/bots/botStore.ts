@@ -964,7 +964,6 @@ export async function addBotProfileAndWait(input: CreateBotProfileInput): Promis
     needsPiDefault
     && getCachedProvidersSnapshot() === null
     && typeof window !== 'undefined'
-    && window.electronAPI?.maker?.listProviders
   ) {
     await refreshLocalCatalogSnapshot();
   }
