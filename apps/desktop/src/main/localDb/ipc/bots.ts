@@ -1788,7 +1788,7 @@ export function registerBotIpc(): void {
           workspaceKind,
           workingDir,
           model:
-            typeof config.model === 'string' && config.model.trim()
+            typeof config.model === 'string'
               ? config.model.trim()
               : defaultBotModelForConfig(config),
           providerId:

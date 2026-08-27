@@ -542,8 +542,8 @@ interface ChatInputProps {
    * 合理的引擎/模型,用户不动它就永远看不见差别。
    */
   settingsLocked?: boolean;
-  /** Hide model and permission controls in bot conversations. */
-  hideRuntimeControls?: boolean;
+  /** Hide the permission control and its keyboard cycling in bot conversations. */
+  hidePermissionSelector?: boolean;
   /** When true, shows Stop button instead of Send button. */
   isStreaming?: boolean;
   /**
@@ -1067,7 +1067,7 @@ export function ChatInput({
   onWorkingDirChange,
   disabled,
   settingsLocked = false,
-  hideRuntimeControls = false,
+  hidePermissionSelector = false,
   isStreaming = false,
   isAgentBusy,
   onStop,
@@ -1807,10 +1807,10 @@ export function ChatInput({
   // 默认取 cc。editorProps.handleKeyDown 是稳定闭包, 走 ref 取值。
   const permissionCycleOptions = useMemo(
     () =>
-      settingsLocked || hideRuntimeControls
+      settingsLocked || hidePermissionSelector
         ? []
         : (activeAgentCapabilities?.permissionModes ?? []),
-    [activeAgentCapabilities, hideRuntimeControls, settingsLocked],
+    [activeAgentCapabilities, hidePermissionSelector, settingsLocked],
   );
   const permissionCycleOptionsRef = useRef(permissionCycleOptions);
   permissionCycleOptionsRef.current = permissionCycleOptions;
@@ -8216,7 +8216,7 @@ export function ChatInput({
                   dense={effectiveDenseToolbar}
                   visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
                 />
-                {!hideRuntimeControls && (
+                {!hidePermissionSelector && (
                   <PermissionSelector
                     permissionMode={activePermissionMode}
                     onPermissionModeChange={handlePermissionModeChange}
@@ -8249,8 +8249,9 @@ export function ChatInput({
                   ) : (
                     <>{middleToolbarSlot}</>
                   ))}
-                {!hideRuntimeControls && (
-                  <div className={useNarrowToolbar ? 'min-w-0 shrink' : undefined}>
+                {/* 模型选择器对每种会话一视同仁 —— 伙伴对话也要能就地切模型，
+                    权限仍由伙伴设置统一管理。 */}
+                <div className={useNarrowToolbar ? 'min-w-0 shrink' : undefined}>
                   <ModelSelector
                     // 选中态一律是会话 / 草稿持有的 **wire model id**(sessions.model 或
                     // lastByVendor.model)。面板行的归一化 id 只活在面板内部 —— 从这里递进去
@@ -8406,8 +8407,7 @@ export function ChatInput({
                     useMorphPopover
                     restoreFocusTarget={composerSuggestionFocusTarget}
                   />
-                  </div>
-                )}
+                </div>
                 <div
                   className={
                     useNarrowToolbar

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CatalogModel, ProviderView } from '@cindy/model-providers';
 
 import {
   addBotProfile,
@@ -11,7 +12,8 @@ import {
   setBotPinned,
   updateBotProfile,
 } from '../botStore';
-import { getDefaultModelForVendor, getModelsForVendor } from '@/lib/modelDefinitions';
+import { getDefaultModelForVendor } from '@/lib/modelDefinitions';
+import { getCachedProvidersSnapshot } from '@/lib/providersSnapshotStore';
 import { getPersistedVendorModel } from '@/state/newMakerDraft';
 
 vi.mock('@/lib/modelDefinitions', () => ({
@@ -23,17 +25,63 @@ vi.mock('@/lib/modelDefinitions', () => ({
     defaultEffort: 'medium',
     vendorKey: 'pi',
   })),
-  getModelsForVendor: vi.fn(() => [
-    {
-      id: 'deepseek-v4-flash',
-      label: 'DeepSeek V4 Flash',
-      description: '',
-      efforts: ['high'],
-      defaultEffort: 'high',
-      vendorKey: 'pi',
-    },
-  ]),
 }));
+
+vi.mock('@/lib/providersSnapshotStore', () => ({
+  getCachedProvidersSnapshot: vi.fn(),
+}));
+
+vi.mock('@/lib/localCatalogSnapshot', () => ({
+  refreshLocalCatalogSnapshot: vi.fn(async () => true),
+}));
+
+function piModel(
+  id: string,
+  sortOrder = 0,
+  defaultEffort: string | null = 'high',
+): CatalogModel {
+  return {
+    id,
+    name: id,
+    group: 'test',
+    sortOrder,
+    contextWindow: 200_000,
+    efforts: defaultEffort ? [defaultEffort] : [],
+    defaultEffort,
+    supportsFastMode: false,
+    status: 'active',
+  } as CatalogModel;
+}
+
+function piProvider(
+  id: string,
+  connected: boolean,
+  models: CatalogModel[],
+  access: 'subscription' | 'managed' = 'managed',
+): ProviderView {
+  return {
+    id,
+    name: id,
+    source: 'builtin',
+    agents: ['pi'],
+    models: { pi: models },
+    routing: {
+      pi: { upstream: 'https://provider.test', authStrategy: 'none' },
+    },
+    auth: { method: 'oauth' },
+    access: access === 'subscription' ? { kind: 'subscription', product: id } : { kind: access },
+    connected,
+  } as unknown as ProviderView;
+}
+
+function setProviders(providers: ProviderView[]): void {
+  vi.mocked(getCachedProvidersSnapshot).mockReturnValue({
+    dataOwnerId: null,
+    ownerGeneration: 0,
+    providers,
+    providerOrder: providers.map((provider) => provider.id),
+  });
+}
 
 describe('bot profile store', () => {
   const createdIds: string[] = [];
@@ -47,15 +95,8 @@ describe('bot profile store', () => {
       defaultEffort: 'medium',
       vendorKey: 'pi',
     });
-    vi.mocked(getModelsForVendor).mockReturnValue([
-      {
-        id: 'deepseek-v4-flash',
-        label: 'DeepSeek V4 Flash',
-        description: '',
-        efforts: ['high'],
-        defaultEffort: 'high',
-        vendorKey: 'pi',
-      },
+    setProviders([
+      piProvider('deepseek', true, [piModel('deepseek-v4-flash')]),
     ]);
   });
 
@@ -96,7 +137,7 @@ describe('bot profile store', () => {
     expect(bot.capabilities.model).toBe('catalog-new-session-default');
   });
 
-  it('defaults new Bots to Pi DeepSeek V4 Flash when it is available', () => {
+  it('defaults new Bots to Pi DeepSeek V4 Flash when it is selectable', () => {
     const bot = addBotProfile({ name: 'Pi Bot', channel: 'local', description: '' });
     createdIds.push(bot.id);
 
@@ -108,17 +149,44 @@ describe('bot profile store', () => {
     });
   });
 
-  it('falls back to the Pi catalog default when DeepSeek V4 Flash is unavailable', () => {
-    vi.mocked(getModelsForVendor).mockReturnValue([]);
+  it('falls back to the first selectable Pi model when DeepSeek V4 Flash is unavailable', () => {
+    setProviders([
+      piProvider(
+        'openai',
+        true,
+        [
+          piModel('chatgpt/gpt-second', 9),
+          piModel('chatgpt/gpt-first', 0, 'medium'),
+        ],
+        'subscription',
+      ),
+      piProvider('deepseek', false, [piModel('deepseek-v4-flash')]),
+    ]);
 
     const bot = addBotProfile({ name: 'Fallback Bot', channel: 'local', description: '' });
     createdIds.push(bot.id);
 
     expect(bot.capabilities).toMatchObject({
       harness: 'pi',
-      model: 'catalog-new-session-default',
-      providerId: null,
+      model: 'chatgpt/gpt-first',
+      providerId: 'openai',
       effort: 'medium',
+    });
+  });
+
+  it('leaves the Pi model empty when there is no selectable model', () => {
+    setProviders([
+      piProvider('deepseek', false, [piModel('deepseek-v4-flash')]),
+    ]);
+
+    const bot = addBotProfile({ name: 'Empty Bot', channel: 'local', description: '' });
+    createdIds.push(bot.id);
+
+    expect(bot.capabilities).toMatchObject({
+      harness: 'pi',
+      model: '',
+      providerId: null,
+      effort: '',
     });
   });
 

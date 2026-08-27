@@ -1,11 +1,13 @@
 import { useSyncExternalStore } from 'react';
+import { effectiveSourceIdForModel, getModel } from '@cindy/model-providers';
 import { getDraft, getPersistedVendorModel } from '@/state/newMakerDraft';
-import { getDefaultModelForVendor, getModelsForVendor } from '@/lib/modelDefinitions';
+import { getDefaultModelForVendor } from '@/lib/modelDefinitions';
+import { pickFirstConnectedModelForAgent } from '@/lib/draftModelCalibration';
+import { refreshLocalCatalogSnapshot } from '@/lib/localCatalogSnapshot';
+import { getCachedProvidersSnapshot } from '@/lib/providersSnapshotStore';
 import {
   NEW_BOT_DEFAULT_HARNESS,
-  NEW_BOT_DEFAULT_PI_EFFORT,
   NEW_BOT_DEFAULT_PI_MODEL,
-  NEW_BOT_DEFAULT_PI_PROVIDER,
 } from '../../../shared/botDefaults';
 import {
   getBotLastReadAtMap,
@@ -297,26 +299,45 @@ const SQLITE_MIGRATION_KEY = 'cindy.bots.v1.sqlite-migrated';
  *    也带着种子默认 —— 直接读它,新建的每个伙伴都会撞上种子档,与用户自己选的无关
  *    (2026-08-21 用户实测投诉)。`modelChosenByVendor` 才是「真选过」的判据,
  *    `getPersistedVendorModel` 就是按它做的读取。
- *  - Pi 优先 DeepSeek V4 Flash,但只有它确实出现在当前可用且默认可见的模型清单里
- *    才选;没有就退回 `getDefaultModelForVendor('pi')`。fallback 的 provider / effort
- *    必须跟目录默认一起切,不能留下 DeepSeek 的来源与强度。
+ *  - 新建 Pi Bot 优先 DeepSeek V4 Flash,但只有它在当前**已连接来源**里真的可路由才选;
+ *    否则取当前可选模型的第一项。一个可选模型都没有时 model 留空,让选择器展示空态。
+ *    model / provider / effort 始终从同一个来源条目一起解析。
  *  - 其它 harness 仍直接取 `getDefaultModelForVendor()`,也就是模型选择器给新对话用的
  *    同一个默认值(服务端目录的 newSessionDefault)。
  */
 function defaultBotModelSettings(vendor: ReturnType<typeof vendorForHarness>): BotModelOverride {
   if (vendor === 'pi') {
-    const preferred = getModelsForVendor(vendor).find(
-      (model) =>
-        model.id === NEW_BOT_DEFAULT_PI_MODEL && model.defaultEnabled !== false,
+    const providers = getCachedProvidersSnapshot()?.providers ?? [];
+    const preferredProviderId = effectiveSourceIdForModel(
+      providers,
+      null,
+      NEW_BOT_DEFAULT_PI_MODEL,
+      'pi',
     );
-    if (preferred) {
+    if (preferredProviderId) {
+      const provider = providers.find((item) => item.id === preferredProviderId);
+      const preferred = provider
+        ? getModel(provider, NEW_BOT_DEFAULT_PI_MODEL, 'pi')
+        : undefined;
       return {
-        model: preferred.id,
-        providerId: NEW_BOT_DEFAULT_PI_PROVIDER,
-        effort: NEW_BOT_DEFAULT_PI_EFFORT,
+        model: NEW_BOT_DEFAULT_PI_MODEL,
+        providerId: preferredProviderId,
+        effort: preferred?.defaultEffort ?? '',
         fastMode: false,
       };
     }
+    const fallback = pickFirstConnectedModelForAgent(providers, 'pi');
+    if (fallback) {
+      const provider = providers.find((item) => item.id === fallback.providerId);
+      const model = provider ? getModel(provider, fallback.model, 'pi') : undefined;
+      return {
+        model: fallback.model,
+        providerId: fallback.providerId,
+        effort: model?.defaultEffort ?? '',
+        fastMode: false,
+      };
+    }
+    return { model: '', providerId: null, effort: '', fastMode: false };
   }
   const fallback = getDefaultModelForVendor(vendor);
   return {
@@ -403,8 +424,10 @@ function defaultCapabilities(harness: BotCapabilities['harness'] = 'claude'): Bo
     // 模型没沿用 lastByVendor 时,来源也不能沿用 —— providerId 与 model 必须同源,
     // 否则会拿一个来源去解析另一个来源的模型 id。
     providerId: resolved.providerId ?? (model === prefs.model ? (prefs.providerId ?? null) : null),
-    effort: resolved.effort || prefs.effort,
-    fastMode: override ? resolved.fastMode : getDraft().fastModeByModel[model] === true,
+    effort: model ? (resolved.effort || prefs.effort) : '',
+    fastMode: model
+      ? (override ? resolved.fastMode : getDraft().fastModeByModel[model] === true)
+      : false,
     harness,
     skillMode: 'inherit',
     skillsExcluded: [],
@@ -933,6 +956,18 @@ export function addBotProfile(input: CreateBotProfileInput): BotProfile {
 
 /** Create the local projection and wait until main/SQLite owns the profile. */
 export async function addBotProfileAndWait(input: CreateBotProfileInput): Promise<BotProfile> {
+  const harness = normalizeBotHarness(
+    input.capabilities?.harness ?? NEW_BOT_DEFAULT_HARNESS,
+  );
+  const needsPiDefault = harness === 'pi' && input.capabilities?.model === undefined;
+  if (
+    needsPiDefault
+    && getCachedProvidersSnapshot() === null
+    && typeof window !== 'undefined'
+    && window.electronAPI?.maker?.listProviders
+  ) {
+    await refreshLocalCatalogSnapshot();
+  }
   const bot = addBotProfile(input);
   const api = botsApi();
   if (!api) return bot;

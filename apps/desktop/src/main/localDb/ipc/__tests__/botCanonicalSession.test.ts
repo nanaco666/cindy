@@ -588,15 +588,15 @@ describe('Bot canonical Session lifecycle', () => {
     });
   });
 
-  it('uses the Pi DeepSeek V4 Flash fallback for a Pi Bot without a model', async () => {
+  it('preserves an explicitly empty model when a Pi Bot has no selectable model', async () => {
     await invoke('local-db:bots:create', {
       id: 'bot-pi-default',
       name: 'Pi Default Bot',
       capabilities: {
         harness: 'pi',
-        providerId: 'deepseek',
+        providerId: null,
         model: '',
-        effort: 'high',
+        effort: '',
         permissions: 'ask',
       },
     });
@@ -609,9 +609,8 @@ describe('Bot canonical Session lifecycle', () => {
 
     expect(created.session).toMatchObject({
       agentKind: 'pi',
-      providerId: 'deepseek',
-      model: 'deepseek-v4-flash',
-      effort: 'high',
+      providerId: null,
+      model: '',
     });
   });
 

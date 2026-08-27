@@ -31,11 +31,11 @@ describe('Bot 对话的判定条件', () => {
     expect(sessionView).toContain('botChatIdentity ? (\n        <BotAvatar bot={botChatIdentity}');
   });
 
-  it('伙伴对话隐藏权限与模型入口,普通任务仍走原占位符', () => {
+  it('伙伴对话只隐藏权限入口,保留模型切换,普通任务仍走原占位符', () => {
     expect(sessionView).toContain('botComposerPlaceholderKey(botChatIdentity.name)');
     // 普通任务仍走原来的占位符。
     expect(sessionView).toContain("t('ccAgent.layout.chatPlaceholder')");
-    expect(sessionView).toContain('hideRuntimeControls={Boolean(botChatIdentity)}');
+    expect(sessionView).toContain('hidePermissionSelector={Boolean(botChatIdentity)}');
   });
 
   it('伙伴对话换掉任务顶栏,而不是在它旁边再加一个', () => {
@@ -64,21 +64,24 @@ describe('消息流的头像挂载', () => {
 });
 
 describe('输入框的运行时控件门控', () => {
-  it('ChatInput 支持隐藏权限与模型入口', () => {
-    expect(chatInput).toContain('hideRuntimeControls?: boolean;');
-    expect(chatInput).toContain('hideRuntimeControls = false,');
-    expect(chatInput).toContain('{!hideRuntimeControls && (');
+  it('ChatInput 只支持隐藏权限入口,模型选择器仍无条件渲染', () => {
+    expect(chatInput).toContain('hidePermissionSelector?: boolean;');
+    expect(chatInput).toContain('hidePermissionSelector = false,');
+    expect(chatInput).toContain('{!hidePermissionSelector && (');
+    expect(chatInput).toContain(
+      "className={useNarrowToolbar ? 'min-w-0 shrink' : undefined}>\n                  <ModelSelector",
+    );
   });
 
   it('隐藏入口时也禁用权限快捷键轮切', () => {
     expect(chatInput).toContain(
-      'settingsLocked || hideRuntimeControls\n        ? []\n        : (activeAgentCapabilities?.permissionModes ?? []),',
+      'settingsLocked || hidePermissionSelector\n        ? []\n        : (activeAgentCapabilities?.permissionModes ?? []),',
     );
   });
 });
 
 /**
- * 伙伴会话仍由 Profile 的默认模型 / 权限驱动,这里只是不把运行时切换入口暴露在 composer。
+ * 伙伴会话仍由 Profile 驱动；模型可在 composer 切换并回写，权限只在设置页管理。
  */
 describe('伙伴对话的运行时选择回写 Profile', () => {
   it('模型 / effort / 权限 / 供应商 / fast 五个入口都接上了回写', () => {
