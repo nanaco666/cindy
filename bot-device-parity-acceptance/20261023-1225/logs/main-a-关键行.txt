@@ -1,0 +1,27 @@
+# 实例 a 的 main-2026-10-23.log 关键行(grep 摘录)
+# FOREIGN KEY 命中数: 0   commitChatImageUrls 命中数: 0
+# --- Companion moved / 迁移
+11570:[2026-10-23T14:04:15.396+08:00] [INFO ] [maker-ipc] Companion moved to this computer {
+11571-   actorId: '27cd7683-46cc-468f-b10b-fc42b896cb62',
+11572-   created: true,
+11573-   inserted: 5,
+11574-   rebuild: 'rebuilt'
+--
+13776:[2026-10-23T14:29:55.825+08:00] [INFO ] [maker-ipc] Companion moved to this computer {
+13777-   actorId: 'e562dc44-7ab3-45a6-b0e2-aca436e55ca4',
+13778-   created: true,
+13779-   inserted: 3,
+13780-   rebuild: 'rebuilt'
+# --- DEVICE_OFFLINE / DEVICE_LINK_NOT_CONNECTED (前 12 条)
+7116:[2026-10-23T12:46:43.910+08:00] [DEBUG] [device-link] device-link request failed kind=invoke channel=device-link:file-peer dst=dev-acce expect=invoke-result request=7db07eaa code=DEVICE_OFFLINE elapsed=28ms firstWriteWaitMs=0 afterFirstWriteMs=28
+7125:[2026-10-23T12:46:43.914+08:00] [ERROR] [console] Error occurred in handler for 'device-link:topic-unsubscribe': Error: [DEVICE_LINK_NOT_CONNECTED] relay rejected reliable link (DEVICE_OFFLINE)
+7132:   code: 'DEVICE_LINK_NOT_CONNECTED'
+7134:[2026-10-23T12:46:43.932+08:00] [WARN ] [device-link] relay-error: [DEVICE_OFFLINE] target device offline dst=dev-acce
+14530:[2026-10-23T14:32:13.380+08:00] [DEBUG] [device-link] device-link request failed kind=link-open channel=link-open dst=5336ed5b expect=link-accept request=10c2ba20 code=DEVICE_OFFLINE elapsed=24ms firstWriteWaitMs=0 afterFirstWriteMs=23
+14549:   code: 'DEVICE_OFFLINE'
+14553:[2026-10-23T14:32:13.566+08:00] [DEBUG] [device-link] device-link request failed kind=link-open channel=link-open dst=dev-dev- expect=link-accept request=694c673d code=DEVICE_OFFLINE elapsed=27ms firstWriteWaitMs=0 afterFirstWriteMs=27
+14559:   code: 'DEVICE_OFFLINE',
+14562:[2026-10-23T14:32:13.567+08:00] [ERROR] [console] Error occurred in handler for 'device-link:invoke': Error: [DEVICE_LINK_DEVICE_OFFLINE] target device offline
+14569:   code: 'DEVICE_LINK_DEVICE_OFFLINE'
+14650:   code: 'DEVICE_OFFLINE',
+14722:[2026-10-23T14:32:51.940+08:00] [DEBUG] [device-link] device-link request failed kind=link-open channel=link-open dst=5336ed5b expect=link-accept request=08a81744 code=DEVICE_OFFLINE elapsed=31ms firstWriteWaitMs=1 afterFirstWriteMs=30

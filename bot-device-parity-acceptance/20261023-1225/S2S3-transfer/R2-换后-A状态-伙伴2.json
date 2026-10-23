@@ -1,0 +1,112 @@
+{
+ "userData": "Cindy-dev2-accept-a",
+ "exportedAt": "2026-10-23T06:36:00.905Z",
+ "botId": "bot_1792736576208_ru7qrw",
+ "profile": {
+  "id": "bot_1792736576208_ru7qrw",
+  "display_name": "验收伙伴2·可删除",
+  "description": "",
+  "status": "active",
+  "current_version": 2,
+  "canonical_session_id": "933d3320-804f-4c07-9f71-5490072c1777",
+  "created_at": 1792736994006,
+  "updated_at": 1792736994322
+ },
+ "latestVersion": {
+  "version": 2,
+  "identity_source": "You are 验收伙伴2·可删除, an intelligent AI assistant running as a Cindy Bot. You are helpful, knowledgeable, and direct. Communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose.",
+  "capabilities": {
+   "permissions": "auto",
+   "toolsetMode": "inherit",
+   "mcpMode": "inherit",
+   "harness": "codex",
+   "providerId": "openai",
+   "model": "gpt-6.1-sol",
+   "effort": "medium",
+   "fastMode": false,
+   "modelOverride": null,
+   "modelChain": [
+    {
+     "harness": "codex",
+     "model": "gpt-6.1-sol",
+     "providerId": "openai",
+     "effort": "medium",
+     "fastMode": false
+    }
+   ],
+   "modelChainOverride": null,
+   "skillMode": "allowlist",
+   "skillsExcluded": [],
+   "toolCapabilityVersion": 1,
+   "toolsets": [],
+   "mcpServers": [],
+   "memory": true,
+   "skills": [],
+   "userContextSource": "",
+   "inputHandoff": true
+  }
+ },
+ "lifecycle": [
+  {
+   "id": "bot_1792736576208_ru7qrw:created:1792736994006",
+   "bot_id": "bot_1792736576208_ru7qrw",
+   "session_id": null,
+   "event_type": "created",
+   "payload_json": "{}",
+   "created_at": 1792736994006
+  },
+  {
+   "id": "bot_1792736576208_ru7qrw:canonical-created:933d3320-804f-4c07-9f71-5490072c1777",
+   "bot_id": "bot_1792736576208_ru7qrw",
+   "session_id": "933d3320-804f-4c07-9f71-5490072c1777",
+   "event_type": "canonical-created",
+   "payload_json": "{\"previousCanonicalSessionId\":null,\"missingCanonicalSessionId\":null,\"profileVersion\":2}",
+   "created_at": 1792736994322
+  }
+ ],
+ "botDirs": [
+  {
+   "owner": "73f7cf3a568063e8f9d4",
+   "files": {
+    "memories/USER.md": {
+     "bytes": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "text": ""
+    },
+    "SOUL.md": {
+     "bytes": 244,
+     "sha256": "8fda4e2d07ddc2ee00cf886aa64b3b4fee98b3d21132fb9c1108f48133534527",
+     "text": "You are 验收伙伴2·可删除, an intelligent AI assistant running as a Cindy Bot. You are helpful, knowledgeable, and direct. Communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose."
+    },
+    "system_prompt.md": {
+     "bytes": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "text": ""
+    }
+   },
+   "routines": []
+  }
+ ],
+ "session": {
+  "id": "933d3320-804f-4c07-9f71-5490072c1777",
+  "title": "验收伙伴2·可删除",
+  "created_at": 1792736994322
+ },
+ "messageCount": 5,
+ "refs": [
+  {
+   "ref_kind": "session-attachment",
+   "hash": "05751d1fc61a679775cf4f117c4394fdb933e2dd756316b6548df823f3092da4"
+  }
+ ],
+ "mediaBlobs": [
+  {
+   "hash": "05751d1fc61a679775cf4f117c4394fdb933e2dd756316b6548df823f3092da4",
+   "ext": ".jpg",
+   "mime_type": "image/jpeg",
+   "bytes": 166333,
+   "onDisk": true,
+   "sha256OnDisk": "05751d1fc61a679775cf4f117c4394fdb933e2dd756316b6548df823f3092da4"
+  }
+ ]
+}

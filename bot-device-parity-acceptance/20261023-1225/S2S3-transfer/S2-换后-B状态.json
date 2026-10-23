@@ -1,0 +1,634 @@
+{
+ "userData": "Cindy-dev2-accept-b",
+ "exportedAt": "2026-10-23T06:06:34.715Z",
+ "botId": "bot_1792728284890_os3asg",
+ "profile": {
+  "id": "bot_1792728284890_os3asg",
+  "display_name": "验收伙伴·可删除",
+  "description": "我是验收人员，关于我：负责跨设备一致性验收，喜欢先看证据再下结论。",
+  "status": "active",
+  "current_version": 16,
+  "canonical_session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+  "created_at": 1792728284933,
+  "updated_at": 1792730386908
+ },
+ "latestVersion": {
+  "version": 16,
+  "identity_source": "You are 验收伙伴·可删除, an intelligent AI assistant running as a Cindy Bot. You are helpful, knowledgeable, and direct. Communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose.\n\n【验收标记】性格：沉稳爱用比喻；每次回答结尾都加一句“验收完毕”。",
+  "capabilities": {
+   "permissions": "auto",
+   "toolsetMode": "allowlist",
+   "mcpMode": "inherit",
+   "model": "gpt-6-luna",
+   "modelOverride": {
+    "model": "gpt-6-luna",
+    "providerId": "openai",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "providerId": "openai",
+   "effort": "medium",
+   "fastMode": false,
+   "harness": "codex",
+   "modelChain": [
+    {
+     "harness": "codex",
+     "model": "gpt-6-luna",
+     "providerId": "openai",
+     "effort": "medium",
+     "fastMode": false
+    }
+   ],
+   "modelChainOverride": [
+    {
+     "harness": "codex",
+     "model": "gpt-6-luna",
+     "providerId": "openai",
+     "effort": "medium",
+     "fastMode": false
+    }
+   ],
+   "skillMode": "allowlist",
+   "skillsExcluded": [],
+   "toolsets": [
+    "browser",
+    "feishu_bot",
+    "wechat",
+    "docs",
+    "collab",
+    "ssh"
+   ],
+   "mcpServers": [],
+   "memory": false,
+   "inputHandoff": false,
+   "toolCapabilityVersion": 1,
+   "skills": [
+    "cindy-skill-creator",
+    "skill-creator"
+   ],
+   "userContextSource": "",
+   "invitation": {
+    "id": "9b5c5b27-4249-41fd-8179-da917212f484",
+    "stage": "ready",
+    "locale": "zh-CN",
+    "avatarRequested": false,
+    "avatarSkipped": false
+   }
+  }
+ },
+ "lifecycle": [
+  {
+   "id": "bot_1792728284890_os3asg:created:1792728284933",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": null,
+   "event_type": "created",
+   "payload_json": "{}",
+   "created_at": 1792728284933
+  },
+  {
+   "id": "bot_1792728284890_os3asg:canonical-created:01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "canonical-created",
+   "payload_json": "{\"previousCanonicalSessionId\":null,\"missingCanonicalSessionId\":null,\"profileVersion\":3}",
+   "created_at": 1792728285078
+  },
+  {
+   "id": "f6c52f90-ee2c-44bd-82b7-124debe64965",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"3bd8453c-49d8-4904-ac71-96e32be23850\",\"profileVersion\":4,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792728285299
+  },
+  {
+   "id": "9f436952-e383-49ea-aa89-5d73743f0c24",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"3bd8453c-49d8-4904-ac71-96e32be23850\",\"profileVersion\":4,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792728287155
+  },
+  {
+   "id": "fd827db9-942b-4bcc-b42f-28d58b3e66c3",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":5,\"runtimeInstanceId\":\"f1070d5d-07bf-4302-8cb0-a2cba57b8969\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792728339093,\"lastObservedAt\":1792728339093}",
+   "created_at": 1792728339099
+  },
+  {
+   "id": "b2007c94-b5c9-4afd-a4b5-502e8e172b41",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"5fbef1f4-e533-4381-9246-b3a4fac0950b\",\"profileVersion\":5,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792728339450
+  },
+  {
+   "id": "85963f86-f65c-416b-803e-3acc77b52da9",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"5fbef1f4-e533-4381-9246-b3a4fac0950b\",\"profileVersion\":5,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792728341339
+  },
+  {
+   "id": "7d2c3aa6-e1f0-462b-83c9-b85a40bb8ec8",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":5,\"runtimeInstanceId\":\"f1070d5d-07bf-4302-8cb0-a2cba57b8969\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792728339093,\"lastObservedAt\":1792728339093}",
+   "created_at": 1792728341345
+  },
+  {
+   "id": "1f7e75be-2dbc-4825-9e59-51ed4ab13020",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":6,\"runtimeInstanceId\":\"c20beb59-6519-4624-9421-5a44e5655b31\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792728428210,\"lastObservedAt\":1792728428210}",
+   "created_at": 1792728428218
+  },
+  {
+   "id": "885ccf63-ea5c-47e2-9da6-88de771b09c9",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"6c423bea-3803-42fb-aa3e-a41ec0611e73\",\"profileVersion\":6,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792728428470
+  },
+  {
+   "id": "2d829b80-fde2-4dae-b1de-d428d225a104",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"6c423bea-3803-42fb-aa3e-a41ec0611e73\",\"profileVersion\":6,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792728430885
+  },
+  {
+   "id": "32bb0ba2-5d87-42d9-85b6-e254bf995642",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":6,\"runtimeInstanceId\":\"c20beb59-6519-4624-9421-5a44e5655b31\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792728428210,\"lastObservedAt\":1792728428210}",
+   "created_at": 1792728430891
+  },
+  {
+   "id": "4a5c66c5-2aa5-47ba-980d-b45af4c187bf",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":7,\"runtimeInstanceId\":\"a87326ad-1644-4c55-ac4b-3d304cbf15ab\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792728529735,\"lastObservedAt\":1792728529735}",
+   "created_at": 1792728529747
+  },
+  {
+   "id": "f1422b00-53ac-4a05-bc2d-beffe20c7f95",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"e934cd4b-86d8-485c-ac74-4e70acb03c3a\",\"profileVersion\":7,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792728530016
+  },
+  {
+   "id": "547f2bd0-73a3-4acb-ba0c-84ca6756357c",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"e934cd4b-86d8-485c-ac74-4e70acb03c3a\",\"profileVersion\":7,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792728532605
+  },
+  {
+   "id": "01f60b68-93f0-4c94-850a-374f91b1b8d9",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":7,\"runtimeInstanceId\":\"a87326ad-1644-4c55-ac4b-3d304cbf15ab\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792728529735,\"lastObservedAt\":1792728529735}",
+   "created_at": 1792728532625
+  },
+  {
+   "id": "8d366eb3-ed1b-4ec1-90df-956c64c00739",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":8,\"runtimeInstanceId\":\"9b8c3f3d-9719-4154-913b-51753d9d7e11\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792728967060,\"lastObservedAt\":1792728967060}",
+   "created_at": 1792728967068
+  },
+  {
+   "id": "a8773a75-0936-448f-bb01-0650c17806d4",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"bceadfa4-4e30-4153-a175-799657205be4\",\"profileVersion\":8,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792728967285
+  },
+  {
+   "id": "f12d8b98-7d95-4b63-bdd7-1349d2211dde",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"bceadfa4-4e30-4153-a175-799657205be4\",\"profileVersion\":8,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792728969561
+  },
+  {
+   "id": "92cd29da-a078-4f5b-a4f5-6295d6f73b33",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":8,\"runtimeInstanceId\":\"9b8c3f3d-9719-4154-913b-51753d9d7e11\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792728967060,\"lastObservedAt\":1792728967060}",
+   "created_at": 1792728969565
+  },
+  {
+   "id": "e7433b8d-6e3a-4df2-9132-fb19b43fffdb",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":9,\"runtimeInstanceId\":\"7be19327-fd07-4231-bee1-ac2bd9178324\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792728976063,\"lastObservedAt\":1792728976063}",
+   "created_at": 1792728976074
+  },
+  {
+   "id": "c273b370-f6e2-42bf-86e1-a8ae2f83e5c9",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"d7f6a8e2-b124-40de-866f-35ec0df4170b\",\"profileVersion\":9,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792728976437
+  },
+  {
+   "id": "f8180396-9167-4674-a110-8c5d07e3a0c5",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"d7f6a8e2-b124-40de-866f-35ec0df4170b\",\"profileVersion\":9,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792728977924
+  },
+  {
+   "id": "cbaf9ff0-af2f-4750-a55a-28bc5e335550",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":9,\"runtimeInstanceId\":\"7be19327-fd07-4231-bee1-ac2bd9178324\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792728976063,\"lastObservedAt\":1792728976063}",
+   "created_at": 1792728977929
+  },
+  {
+   "id": "810476b3-5028-4090-b063-37170dd75a11",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":10,\"runtimeInstanceId\":\"65e45d25-bd62-4a77-8494-c78cddb5310c\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792729006195,\"lastObservedAt\":1792729006195}",
+   "created_at": 1792729006200
+  },
+  {
+   "id": "7d5746a9-c0fe-4fec-b09f-32700c41454f",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"4ee2a05b-e6c3-4ea0-bb64-fe860d1395ef\",\"profileVersion\":10,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792729006432
+  },
+  {
+   "id": "2c9e9535-5132-43db-8c51-ccb008c95efe",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"4ee2a05b-e6c3-4ea0-bb64-fe860d1395ef\",\"profileVersion\":10,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792729008306
+  },
+  {
+   "id": "44ad008b-fdf9-4686-91e4-33ceda2ab7f4",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":10,\"runtimeInstanceId\":\"65e45d25-bd62-4a77-8494-c78cddb5310c\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792729006195,\"lastObservedAt\":1792729006195}",
+   "created_at": 1792729008311
+  },
+  {
+   "id": "a45303cc-1018-4a31-95fe-244ea409cf96",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"f33052e5-a16b-4b67-8dce-de6bfe47b446\",\"profileVersion\":11,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792729154470
+  },
+  {
+   "id": "2cdd4c13-85a3-4c0b-9a1c-f4478077c7dd",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"f33052e5-a16b-4b67-8dce-de6bfe47b446\",\"profileVersion\":11,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792729156752
+  },
+  {
+   "id": "3496f814-05e1-4802-927d-1564085b35b5",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":11,\"runtimeInstanceId\":\"3113d14a-bea3-4fd5-8dcd-54359dded33a\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730281090,\"lastObservedAt\":1792730281090}",
+   "created_at": 1792730281098
+  },
+  {
+   "id": "5b800876-cddd-48a9-acf3-8ecce273573c",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"e51d7e77-b4e0-474d-9e58-519e129e4368\",\"profileVersion\":11,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792730281434
+  },
+  {
+   "id": "9c708b79-9e1d-4721-80ca-6ed76ae8a6a3",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"e51d7e77-b4e0-474d-9e58-519e129e4368\",\"profileVersion\":11,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792730284033
+  },
+  {
+   "id": "a9083faf-4c3c-4d11-810d-f593a4b3082b",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":11,\"runtimeInstanceId\":\"3113d14a-bea3-4fd5-8dcd-54359dded33a\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730281090,\"lastObservedAt\":1792730281090}",
+   "created_at": 1792730284041
+  },
+  {
+   "id": "6f1e695b-9907-4d28-afbc-368d0c95fbdd",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":12,\"runtimeInstanceId\":\"39535ba4-9a36-4de6-a780-d8f0e6a21045\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730312031,\"lastObservedAt\":1792730312031}",
+   "created_at": 1792730312039
+  },
+  {
+   "id": "44589e3c-cdc6-4bb1-aba7-b34a8a89cbed",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"f96391f6-c516-47be-9eb4-a4356cd022c7\",\"profileVersion\":12,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792730312306
+  },
+  {
+   "id": "9b7a3c41-4fdf-43b5-bf4e-29655820f1e5",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"f96391f6-c516-47be-9eb4-a4356cd022c7\",\"profileVersion\":12,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792730314040
+  },
+  {
+   "id": "464d7cdc-9b2c-4708-9353-bccd82862dc4",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":12,\"runtimeInstanceId\":\"39535ba4-9a36-4de6-a780-d8f0e6a21045\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730312031,\"lastObservedAt\":1792730312031}",
+   "created_at": 1792730314043
+  },
+  {
+   "id": "335c6636-0414-4b8f-9823-dcf56c509ebc",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":13,\"runtimeInstanceId\":\"27f8cb3d-aa80-4695-a465-757fcdca8bae\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730355907,\"lastObservedAt\":1792730355907}",
+   "created_at": 1792730355914
+  },
+  {
+   "id": "8c641507-8f53-4cd7-8fdb-0873fbb047ab",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"3bf0f172-ee6a-4cc3-a658-84cefc55cf6d\",\"profileVersion\":13,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792730356203
+  },
+  {
+   "id": "9012c756-33a9-4e06-b056-f0daf73ec6b1",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"3bf0f172-ee6a-4cc3-a658-84cefc55cf6d\",\"profileVersion\":13,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792730358053
+  },
+  {
+   "id": "7a634d8a-7388-4aee-87e8-fe8200cfe22e",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":13,\"runtimeInstanceId\":\"27f8cb3d-aa80-4695-a465-757fcdca8bae\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730355907,\"lastObservedAt\":1792730355907}",
+   "created_at": 1792730358057
+  },
+  {
+   "id": "1722b3a5-afc9-4a76-862c-d548c11ed563",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":14,\"runtimeInstanceId\":\"b6efdad5-3ca7-4ead-abab-3e7b06bf806b\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730360002,\"lastObservedAt\":1792730360002}",
+   "created_at": 1792730360012
+  },
+  {
+   "id": "b548ad4c-9ac6-4459-b5df-db3e73aec186",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"72cd9080-4de0-4c45-8418-a705fcf8bef4\",\"profileVersion\":14,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792730360296
+  },
+  {
+   "id": "e15bbbdc-e926-4e9a-9625-33c271c13a0c",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"72cd9080-4de0-4c45-8418-a705fcf8bef4\",\"profileVersion\":14,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792730361755
+  },
+  {
+   "id": "6ad8797b-28b9-495d-acf0-6c89049aa398",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":14,\"runtimeInstanceId\":\"b6efdad5-3ca7-4ead-abab-3e7b06bf806b\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730360002,\"lastObservedAt\":1792730360002}",
+   "created_at": 1792730361759
+  },
+  {
+   "id": "72523df0-8cc5-4731-a2c2-e900516f52e7",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":15,\"runtimeInstanceId\":\"d0952d26-7857-4dfc-9e95-c1c033af41a1\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730365536,\"lastObservedAt\":1792730365536}",
+   "created_at": 1792730365543
+  },
+  {
+   "id": "48fd48ff-b622-4492-ada5-ec17fd5c9d45",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"e409c3bc-66ed-42cc-a0d3-4db9427831cc\",\"profileVersion\":15,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792730365979
+  },
+  {
+   "id": "c542a169-f277-4b5e-8730-c6e0ad261ded",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"e409c3bc-66ed-42cc-a0d3-4db9427831cc\",\"profileVersion\":15,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792730367605
+  },
+  {
+   "id": "a6e5f1f5-9c82-4460-a848-a6022007d9ac",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":15,\"runtimeInstanceId\":\"d0952d26-7857-4dfc-9e95-c1c033af41a1\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730365536,\"lastObservedAt\":1792730365536}",
+   "created_at": 1792730367611
+  },
+  {
+   "id": "a4afc30d-3883-4ba2-8804-3dea15ff80a0",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":16,\"runtimeInstanceId\":\"c2b86e56-5d3a-47fb-a9cb-e63907a08946\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730386913,\"lastObservedAt\":1792730386913}",
+   "created_at": 1792730386919
+  },
+  {
+   "id": "99503964-ac0c-4dc4-ad9b-62e9ae4ee79f",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"acd94549-91c7-4635-8906-b7633c2f5236\",\"profileVersion\":16,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792730387163
+  },
+  {
+   "id": "7043b4cf-41d9-4da9-bc3f-f62653b31467",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"acd94549-91c7-4635-8906-b7633c2f5236\",\"profileVersion\":16,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792730388864
+  },
+  {
+   "id": "6a6dd219-36d4-4c67-84f1-9962c47405c4",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":16,\"runtimeInstanceId\":\"c2b86e56-5d3a-47fb-a9cb-e63907a08946\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792730386913,\"lastObservedAt\":1792730386913}",
+   "created_at": 1792730388868
+  }
+ ],
+ "botDirs": [
+  {
+   "owner": "73f7cf3a568063e8f9d4",
+   "files": {
+    "memories/MEMORY.md": {
+     "bytes": 224,
+     "sha256": "797cdfc59cd817e6515ff743ecae2b194cf442f0e973773d906a44fcb3f7021b",
+     "text": "# Memory Index\n\n## reference\n- [reference_acceptance-code-a.md] 验收暗号A — 验收暗号A是“蓝色水壶（已在A远程编辑）”。\n- [reference_acceptance-code-b.md] 验收暗号B — 验收暗号B的内容。\n"
+    },
+    "memories/meta.json": {
+     "bytes": 134,
+     "sha256": "57eae6cc63ab414153e3b15394f73c4fbcb361928826c6b359dd1c4f12368049",
+     "text": "{\n  \"absPath\": \"bot:bot_1792728284890_os3asg\",\n  \"createdAt\": \"2026-10-23T04:04:45.236Z\",\n  \"lastUsedAt\": \"2026-10-23T04:04:45.236Z\"\n}"
+    },
+    "memories/reference_acceptance-code-a.md": {
+     "bytes": 222,
+     "sha256": "d9e404a783d815456cf17f7305f4202d02dfbc5a9c57d22fde1abff6d394deaf",
+     "text": "---\ntitle: 验收暗号A\ndescription: 验收暗号A是“蓝色水壶（已在A远程编辑）”。\ntype: reference\nupdatedAt: '2026-10-23T04:37:58.036Z'\n---\n验收暗号A是“蓝色水壶（已在A远程编辑）”。\n"
+    },
+    "memories/reference_acceptance-code-b.md": {
+     "bytes": 166,
+     "sha256": "cc9f8918a2a076142b3943c002cc4221a0d6851fd4b6ce97483b4983d0c3a432",
+     "text": "---\ntitle: 验收暗号B\ndescription: 验收暗号B的内容。\ntype: reference\nupdatedAt: '2026-10-23T04:14:29.292Z'\n---\n验收暗号B是“十二点零四分”。\n"
+    },
+    "SOUL.md": {
+     "bytes": 344,
+     "sha256": "038387b769844e0c7e2f2ae62ec9fc28c41acc461e9ff90ece135ef8d6e1d5a0",
+     "text": "You are 验收伙伴·可删除, an intelligent AI assistant running as a Cindy Bot. You are helpful, knowledgeable, and direct. Communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose.\n\n【验收标记】性格：沉稳爱用比喻；每次回答结尾都加一句“验收完毕”。"
+    },
+    "working-memory.json": {
+     "bytes": 518,
+     "sha256": "411d56280a544a38e99a086ca6a41983a89ef6c93732de35b34a422289c5102c",
+     "text": "{\n  \"version\": 1,\n  \"revision\": 3,\n  \"coveredThroughRowid\": 30,\n  \"updatedAt\": 1792728874963,\n  \"threads\": [],\n  \"commitments\": [],\n  \"waiting\": [],\n  \"corrections\": [],\n  \"recentlyDone\": [\n    {\n      \"id\": \"wm_mvkghgwj_1\",\n      \"text\": \"已分别保存验收暗号A（蓝色水壶）与验收暗号B（十二点零四分）两条 reference 记忆，并回复名字\",\n      \"messageId\": \"jt9o4ep9yq6cc38ovu1ysyjb\",\n      \"updatedAt\": 1792728874963\n    }\n  ],\n  \"coveredThroughMessageId\": \"jt9o4ep9yq6cc38ovu1ysyjb\"\n}"
+    },
+    "workspace/acceptance-report.docx": {
+     "bytes": 9798,
+     "sha256": "4d28372bd8813979ffe16ac122d314494d44ce42acb176501fa875e36b27dab2"
+    }
+   },
+   "routines": [
+    {
+     "name": "跟进任务",
+     "prompt": "看看这些任务做得怎么样，有什么需要我回复或决策的，给我你的判断和建议。没有新情况就不用提醒；未经我允许，不要给任务发消息或改变任务状态。",
+     "enabled": true,
+     "builtin": "follow-up",
+     "triggers": [
+      {
+       "kind": "event",
+       "eventType": "stuck"
+      },
+      {
+       "kind": "event",
+       "eventType": "waiting"
+      },
+      {
+       "kind": "event",
+       "eventType": "errored"
+      },
+      {
+       "kind": "event",
+       "eventType": "usage-limit"
+      },
+      {
+       "kind": "event",
+       "eventType": "finished"
+      },
+      {
+       "kind": "event",
+       "eventType": "sweep"
+      }
+     ]
+    },
+    {
+     "name": "验收例行任务",
+     "prompt": "每天早上九点，用一句话总结昨天的验收进度。",
+     "enabled": true,
+     "triggers": [
+      {
+       "kind": "cron",
+       "expression": "0 9 * * *",
+       "timezone": "Asia/Shanghai"
+      }
+     ]
+    },
+    {
+     "name": "A上新建的例行任务",
+     "prompt": "每天晚上八点，提醒我检查验收证据是否齐全。",
+     "enabled": true,
+     "triggers": [
+      {
+       "kind": "cron",
+       "expression": "0 9 * * *",
+       "timezone": "Asia/Shanghai"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "session": {
+  "id": "01100a49-6aac-4c67-ba3a-e08d5d949b42",
+  "title": "验收伙伴·可删除",
+  "created_at": 1792728285078
+ },
+ "messageCount": 24,
+ "refs": [
+  {
+   "ref_kind": "session-attachment",
+   "hash": "3a61e029a115cc1d6e9dec026bf3cc5b3d4c4cb1fe3bccc5c4c1b0e8eabaa8b9"
+  }
+ ],
+ "mediaBlobs": [
+  {
+   "hash": "3a61e029a115cc1d6e9dec026bf3cc5b3d4c4cb1fe3bccc5c4c1b0e8eabaa8b9",
+   "ext": ".png",
+   "mime_type": "image/png",
+   "bytes": 1275020,
+   "onDisk": true,
+   "sha256OnDisk": "3a61e029a115cc1d6e9dec026bf3cc5b3d4c4cb1fe3bccc5c4c1b0e8eabaa8b9"
+  }
+ ]
+}

@@ -1,0 +1,161 @@
+{
+ "userData": "Cindy-dev2-accept-a",
+ "exportedAt": "2026-10-23T06:06:34.507Z",
+ "botId": "bot_1792728284890_os3asg",
+ "profile": {
+  "id": "bot_1792728284890_os3asg",
+  "display_name": "验收伙伴·可删除",
+  "description": "我是验收人员，关于我：负责跨设备一致性验收，喜欢先看证据再下结论。",
+  "status": "active",
+  "current_version": 2,
+  "canonical_session_id": "9539dca8-d82b-4476-bc2b-c89e19fda15f",
+  "created_at": 1792735454708,
+  "updated_at": 1792735454971
+ },
+ "latestVersion": {
+  "version": 2,
+  "identity_source": "You are 验收伙伴·可删除, an intelligent AI assistant running as a Cindy Bot. You are helpful, knowledgeable, and direct. Communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose.\n\n【验收标记】性格：沉稳爱用比喻；每次回答结尾都加一句“验收完毕”。",
+  "capabilities": {
+   "permissions": "auto",
+   "toolsetMode": "allowlist",
+   "mcpMode": "inherit",
+   "harness": "codex",
+   "providerId": "openai",
+   "model": "gpt-6-luna",
+   "effort": "medium",
+   "fastMode": false,
+   "modelOverride": null,
+   "modelChain": [
+    {
+     "harness": "codex",
+     "model": "gpt-6-luna",
+     "providerId": "openai",
+     "effort": "medium",
+     "fastMode": false
+    }
+   ],
+   "modelChainOverride": [
+    {
+     "harness": "codex",
+     "model": "gpt-6-luna",
+     "providerId": "openai",
+     "effort": "medium",
+     "fastMode": false
+    }
+   ],
+   "skillMode": "allowlist",
+   "skillsExcluded": [],
+   "toolCapabilityVersion": 1,
+   "toolsets": [
+    "browser",
+    "feishu_bot",
+    "wechat",
+    "docs",
+    "collab",
+    "ssh"
+   ],
+   "mcpServers": [],
+   "memory": false,
+   "skills": [
+    "cindy-skill-creator",
+    "skill-creator"
+   ],
+   "userContextSource": "",
+   "inputHandoff": false
+  }
+ },
+ "lifecycle": [
+  {
+   "id": "bot_1792728284890_os3asg:created:1792735454708",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": null,
+   "event_type": "created",
+   "payload_json": "{}",
+   "created_at": 1792735454708
+  },
+  {
+   "id": "bot_1792728284890_os3asg:canonical-created:9539dca8-d82b-4476-bc2b-c89e19fda15f",
+   "bot_id": "bot_1792728284890_os3asg",
+   "session_id": "9539dca8-d82b-4476-bc2b-c89e19fda15f",
+   "event_type": "canonical-created",
+   "payload_json": "{\"previousCanonicalSessionId\":null,\"missingCanonicalSessionId\":null,\"profileVersion\":2}",
+   "created_at": 1792735454971
+  }
+ ],
+ "botDirs": [
+  {
+   "owner": "73f7cf3a568063e8f9d4",
+   "files": {
+    "memories/MEMORY.md": {
+     "bytes": 224,
+     "sha256": "797cdfc59cd817e6515ff743ecae2b194cf442f0e973773d906a44fcb3f7021b",
+     "text": "# Memory Index\n\n## reference\n- [reference_acceptance-code-a.md] 验收暗号A — 验收暗号A是“蓝色水壶（已在A远程编辑）”。\n- [reference_acceptance-code-b.md] 验收暗号B — 验收暗号B的内容。\n"
+    },
+    "memories/meta.json": {
+     "bytes": 134,
+     "sha256": "7ab93b05f974955e64aee7943d6bb76c01456928a7e9cb7c4e7e46cbcbd304bc",
+     "text": "{\n  \"absPath\": \"bot:bot_1792728284890_os3asg\",\n  \"createdAt\": \"2026-10-23T06:04:14.813Z\",\n  \"lastUsedAt\": \"2026-10-23T06:04:14.813Z\"\n}"
+    },
+    "memories/reference_acceptance-code-a.md": {
+     "bytes": 222,
+     "sha256": "a6aad87281b9970510646a35d28d4bcbc744bc7699b8e543aba74ecbe115c4e5",
+     "text": "---\ntitle: 验收暗号A\ndescription: 验收暗号A是“蓝色水壶（已在A远程编辑）”。\ntype: reference\nupdatedAt: '2026-10-23T06:04:14.833Z'\n---\n验收暗号A是“蓝色水壶（已在A远程编辑）”。\n"
+    },
+    "memories/reference_acceptance-code-b.md": {
+     "bytes": 166,
+     "sha256": "96e16b83e58ead1a84d21a6fceaa8d724051d41619a9a9dc574924063ed100ec",
+     "text": "---\ntitle: 验收暗号B\ndescription: 验收暗号B的内容。\ntype: reference\nupdatedAt: '2026-10-23T06:04:14.846Z'\n---\n验收暗号B是“十二点零四分”。\n"
+    },
+    "memories/USER.md": {
+     "bytes": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "text": ""
+    },
+    "SOUL.md": {
+     "bytes": 344,
+     "sha256": "038387b769844e0c7e2f2ae62ec9fc28c41acc461e9ff90ece135ef8d6e1d5a0",
+     "text": "You are 验收伙伴·可删除, an intelligent AI assistant running as a Cindy Bot. You are helpful, knowledgeable, and direct. Communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose.\n\n【验收标记】性格：沉稳爱用比喻；每次回答结尾都加一句“验收完毕”。"
+    },
+    "system_prompt.md": {
+     "bytes": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "text": ""
+    }
+   },
+   "routines": [
+    {
+     "name": "验收例行任务",
+     "prompt": "每天早上九点，用一句话总结昨天的验收进度。",
+     "enabled": true,
+     "triggers": [
+      {
+       "kind": "cron",
+       "expression": "0 9 * * *",
+       "timezone": "Asia/Shanghai"
+      }
+     ]
+    },
+    {
+     "name": "A上新建的例行任务",
+     "prompt": "每天晚上八点，提醒我检查验收证据是否齐全。",
+     "enabled": true,
+     "triggers": [
+      {
+       "kind": "cron",
+       "expression": "0 9 * * *",
+       "timezone": "Asia/Shanghai"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "session": {
+  "id": "9539dca8-d82b-4476-bc2b-c89e19fda15f",
+  "title": "验收伙伴·可删除",
+  "created_at": 1792735454971
+ },
+ "messageCount": 7,
+ "refs": [],
+ "mediaBlobs": []
+}

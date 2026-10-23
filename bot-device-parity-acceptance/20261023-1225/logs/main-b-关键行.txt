@@ -1,0 +1,13 @@
+# 实例 b 的 main-2026-10-23.log 关键行(grep 摘录)
+# FOREIGN KEY 命中数: 0   commitChatImageUrls 命中数: 0
+# --- Companion moved / 迁移
+14157:[2026-10-23T14:42:29.584+08:00] [INFO ] [maker-ipc] Companion moved to this computer {
+14158-   actorId: 'e562dc44-7ab3-45a6-b0e2-aca436e55ca4',
+14159-   created: false,
+14160-   inserted: 0,
+14161-   rebuild: 'skipped'
+# --- DEVICE_OFFLINE / DEVICE_LINK_NOT_CONNECTED (前 12 条)
+7134:[2026-10-23T12:53:05.385+08:00] [ERROR] [console] Error occurred in handler for 'shared-task:account': Error: [DEVICE_LINK_NOT_CONNECTED] SharedTask relay is not connected
+7141:   code: 'DEVICE_LINK_NOT_CONNECTED'
+13155:[2026-10-23T14:32:27.455+08:00] [DEBUG] [device-link] device-link request failed kind=link-open channel=link-open dst=dev-dev- expect=link-accept request=ce151ae7 code=DEVICE_OFFLINE elapsed=24ms firstWriteWaitMs=0 afterFirstWriteMs=24
+13174:   code: 'DEVICE_OFFLINE'

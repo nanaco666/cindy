@@ -1,0 +1,6 @@
+12:46:43  taskkill B 主进程树(PID 23196, 仅 cindy-accept-b)
+12:46:43  A main 日志: device-link request failed ... code=DEVICE_OFFLINE; [ERROR] [console] Error occurred in handler for 'device-link:topic-unsubscribe': Error: [DEVICE_LINK_NOT_CONNECTED] relay rejected reliable link (DEVICE_OFFLINE)
+12:47-12:50  A 伙伴视图退为云端只读对话,顶部横幅「主力电脑「验收 B · 伙伴主力」没有开放远程控制」+「在这台电脑继续」;点「设置」图标无面板(URL 追加 ?settings=1)
+12:50:2x  重启 B (pnpm restart:desktop:remote --region=cn --isolated=accept-b)
+12:51:43  B CDP 9334 恢复
+12:53:08  A 视图自动恢复为 LIVE(无需手动操作)

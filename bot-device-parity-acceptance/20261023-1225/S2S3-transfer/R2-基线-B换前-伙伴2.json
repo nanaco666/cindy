@@ -1,0 +1,209 @@
+{
+ "userData": "Cindy-dev2-accept-b",
+ "exportedAt": "2026-10-23T06:28:36.741Z",
+ "botId": "bot_1792736576208_ru7qrw",
+ "profile": {
+  "id": "bot_1792736576208_ru7qrw",
+  "display_name": "验收伙伴2·可删除",
+  "description": "",
+  "status": "active",
+  "current_version": 5,
+  "canonical_session_id": "a3788cca-c2c2-4b50-a57b-a97c7f38f301",
+  "created_at": 1792736576286,
+  "updated_at": 1792736583829
+ },
+ "latestVersion": {
+  "version": 5,
+  "identity_source": "You are 验收伙伴2·可删除, an intelligent AI assistant running as a Cindy Bot. You are helpful, knowledgeable, and direct. Communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose.",
+  "capabilities": {
+   "permissions": "ask",
+   "toolsetMode": "inherit",
+   "mcpMode": "inherit",
+   "model": "gpt-6.1-sol",
+   "modelOverride": null,
+   "providerId": "openai",
+   "effort": "medium",
+   "fastMode": false,
+   "harness": "codex",
+   "modelChain": [
+    {
+     "harness": "codex",
+     "model": "gpt-6.1-sol",
+     "providerId": "openai",
+     "effort": "medium",
+     "fastMode": false
+    }
+   ],
+   "modelChainOverride": null,
+   "skillMode": "allowlist",
+   "skillsExcluded": [],
+   "toolsets": [],
+   "mcpServers": [],
+   "memory": true,
+   "inputHandoff": true,
+   "toolCapabilityVersion": 1,
+   "skills": [],
+   "userContextSource": "",
+   "invitation": {
+    "id": "18c2df28-96e8-458c-9593-9d793fd4067a",
+    "stage": "ready",
+    "locale": "zh-CN",
+    "avatarRequested": false,
+    "avatarSkipped": false
+   }
+  }
+ },
+ "lifecycle": [
+  {
+   "id": "bot_1792736576208_ru7qrw:created:1792736576286",
+   "bot_id": "bot_1792736576208_ru7qrw",
+   "session_id": null,
+   "event_type": "created",
+   "payload_json": "{}",
+   "created_at": 1792736576286
+  },
+  {
+   "id": "bot_1792736576208_ru7qrw:canonical-created:a3788cca-c2c2-4b50-a57b-a97c7f38f301",
+   "bot_id": "bot_1792736576208_ru7qrw",
+   "session_id": "a3788cca-c2c2-4b50-a57b-a97c7f38f301",
+   "event_type": "canonical-created",
+   "payload_json": "{\"previousCanonicalSessionId\":null,\"missingCanonicalSessionId\":null,\"profileVersion\":3}",
+   "created_at": 1792736576452
+  },
+  {
+   "id": "a7adfa24-7d45-4b98-bbf6-354288669a84",
+   "bot_id": "bot_1792736576208_ru7qrw",
+   "session_id": "a3788cca-c2c2-4b50-a57b-a97c7f38f301",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"6347bb85-1d33-4223-8b56-2de14a66b305\",\"profileVersion\":4,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792736577059
+  },
+  {
+   "id": "108a701d-7ffe-44dc-988e-2226b7b22f62",
+   "bot_id": "bot_1792736576208_ru7qrw",
+   "session_id": "a3788cca-c2c2-4b50-a57b-a97c7f38f301",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"6347bb85-1d33-4223-8b56-2de14a66b305\",\"profileVersion\":4,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792736582653
+  },
+  {
+   "id": "f4a59ae7-be2e-4824-b3ce-8c5c8ec41062",
+   "bot_id": "bot_1792736576208_ru7qrw",
+   "session_id": "a3788cca-c2c2-4b50-a57b-a97c7f38f301",
+   "event_type": "compact-runtime-refresh-requested",
+   "payload_json": "{\"profileVersion\":5,\"runtimeInstanceId\":\"14012fba-b67b-4aef-8a9d-9199fbcf0c99\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792736743042,\"lastObservedAt\":1792736743042}",
+   "created_at": 1792736743050
+  },
+  {
+   "id": "9dd735b6-7219-496c-a82b-37f18e33f4ea",
+   "bot_id": "bot_1792736576208_ru7qrw",
+   "session_id": "a3788cca-c2c2-4b50-a57b-a97c7f38f301",
+   "event_type": "runtime-prepared",
+   "payload_json": "{\"snapshotId\":\"13c8f0c0-dd20-411e-9e6c-2e8386bec055\",\"profileVersion\":5,\"agentKind\":\"codex\",\"resolutionStatus\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[],\"unavailableMemoryRefs\":[]}",
+   "created_at": 1792736743588
+  },
+  {
+   "id": "95a9532e-24ee-4476-a771-8fcbfea665d7",
+   "bot_id": "bot_1792736576208_ru7qrw",
+   "session_id": "a3788cca-c2c2-4b50-a57b-a97c7f38f301",
+   "event_type": "runtime-applied",
+   "payload_json": "{\"snapshotId\":\"13c8f0c0-dd20-411e-9e6c-2e8386bec055\",\"profileVersion\":5,\"status\":\"applied\",\"unavailableSkills\":[],\"unavailableMcpServers\":[],\"unavailableToolsets\":[]}",
+   "created_at": 1792736747037
+  },
+  {
+   "id": "16ede830-3154-4bf2-a7a7-aa6c7cd22c3b",
+   "bot_id": "bot_1792736576208_ru7qrw",
+   "session_id": "a3788cca-c2c2-4b50-a57b-a97c7f38f301",
+   "event_type": "compact-runtime-refresh-applied",
+   "payload_json": "{\"profileVersion\":5,\"runtimeInstanceId\":\"14012fba-b67b-4aef-8a9d-9199fbcf0c99\",\"compactBoundaryCount\":1,\"firstObservedAt\":1792736743042,\"lastObservedAt\":1792736743042}",
+   "created_at": 1792736747045
+  }
+ ],
+ "botDirs": [
+  {
+   "owner": "73f7cf3a568063e8f9d4",
+   "files": {
+    "memories/MEMORY.md": {
+     "bytes": 69,
+     "sha256": "352121ce6932565371ac0a127dc3eea378579c00941c6a7c164a8d4c88eb9c3c",
+     "text": "# Memory Index\n\n_(empty — no memories saved yet for this workdir)_\n"
+    },
+    "memories/meta.json": {
+     "bytes": 134,
+     "sha256": "11c0212e3ad4126632969467ff4aca864f79e77634c65c8e9a00388bf514852f",
+     "text": "{\n  \"absPath\": \"bot:bot_1792736576208_ru7qrw\",\n  \"createdAt\": \"2026-10-23T06:22:56.851Z\",\n  \"lastUsedAt\": \"2026-10-23T06:22:56.851Z\"\n}"
+    },
+    "SOUL.md": {
+     "bytes": 244,
+     "sha256": "8fda4e2d07ddc2ee00cf886aa64b3b4fee98b3d21132fb9c1108f48133534527",
+     "text": "You are 验收伙伴2·可删除, an intelligent AI assistant running as a Cindy Bot. You are helpful, knowledgeable, and direct. Communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose."
+    },
+    "working-memory.json": {
+     "bytes": 753,
+     "sha256": "d4d23d3930223c2d3c768465cb71fcb07c410db46741b300047307ffa11211f5",
+     "text": "{\n  \"version\": 1,\n  \"revision\": 2,\n  \"coveredThroughRowid\": 50,\n  \"updatedAt\": 1792736854166,\n  \"threads\": [],\n  \"commitments\": [],\n  \"waiting\": [],\n  \"corrections\": [],\n  \"recentlyDone\": [\n    {\n      \"id\": \"wm_mvkl8hp2_1\",\n      \"text\": \"已用 media 工具生成红色小狐狸卡通图并在回复中以 ![红色小狐狸](cindy-media://…) 引用\",\n      \"messageId\": \"urpxy4idvittt70u95zfw488\",\n      \"updatedAt\": 1792736854166\n    },\n    {\n      \"id\": \"wm_mvkl8hp2_2\",\n      \"text\": \"已在工作目录写出 acceptance2.docx（标题“第二轮验收”加两行说明）并在回复中点名\",\n      \"messageId\": \"urpxy4idvittt70u95zfw488\",\n      \"updatedAt\": 1792736854166\n    }\n  ],\n  \"coveredThroughMessageId\": \"urpxy4idvittt70u95zfw488\"\n}"
+    },
+    "workspace/acceptance2.docx": {
+     "bytes": 9835,
+     "sha256": "1e8a9ac05bd2e8a93b3d3ace95e0b8c4a744273f773a63eeae17c3710d79acce"
+    }
+   },
+   "routines": [
+    {
+     "name": "跟进任务",
+     "prompt": "看看这些任务做得怎么样，有什么需要我回复或决策的，给我你的判断和建议。没有新情况就不用提醒；未经我允许，不要给任务发消息或改变任务状态。",
+     "enabled": true,
+     "builtin": "follow-up",
+     "triggers": [
+      {
+       "kind": "event",
+       "eventType": "stuck"
+      },
+      {
+       "kind": "event",
+       "eventType": "waiting"
+      },
+      {
+       "kind": "event",
+       "eventType": "errored"
+      },
+      {
+       "kind": "event",
+       "eventType": "usage-limit"
+      },
+      {
+       "kind": "event",
+       "eventType": "finished"
+      },
+      {
+       "kind": "event",
+       "eventType": "sweep"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "session": {
+  "id": "a3788cca-c2c2-4b50-a57b-a97c7f38f301",
+  "title": "验收伙伴2·可删除",
+  "created_at": 1792736576452
+ },
+ "messageCount": 18,
+ "refs": [
+  {
+   "ref_kind": "session-attachment",
+   "hash": "05751d1fc61a679775cf4f117c4394fdb933e2dd756316b6548df823f3092da4"
+  }
+ ],
+ "mediaBlobs": [
+  {
+   "hash": "05751d1fc61a679775cf4f117c4394fdb933e2dd756316b6548df823f3092da4",
+   "ext": ".jpg",
+   "mime_type": "image/jpeg",
+   "bytes": 166333,
+   "onDisk": true,
+   "sha256OnDisk": "05751d1fc61a679775cf4f117c4394fdb933e2dd756316b6548df823f3092da4"
+  }
+ ]
+}

@@ -1,0 +1,25 @@
+设置
+
+模型
+主模型
+Codex
+·
+GPT-6-Luna
+·
+中
+
+OpenAI · <redacted-email>
+
+备用模型（0）
+任务模型
+Codex
+·
+GPT-6-Luna
+·
+中
+
+OpenAI · <redacted-email>
+
+继承主模型，用于新建后台任务
+
+返回对话
