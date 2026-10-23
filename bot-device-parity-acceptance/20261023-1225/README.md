@@ -159,6 +159,7 @@ A 的 `routines.json` 里伙伴1的内置跟进条目 14:17 还没有、14:36 �
 | D7 | S2/S3 | 换电脑后 A 上导入的 assistant 消息在聊天里显示为原始 JSON 外壳 `[{"type":"text","text":"…"}]`（B 上是纯文本）。A 的 `messages` 里这些行 `content` 是 JSON 数组字符串、`agent_kind`/`agent_meta` 为空。两轮都复现。 | **高**（换电脑后每条 AI 回复都难读） | `S3-换后-A-聊天首次打开-dark.png`、`R2-换后-A-伙伴2聊天-dark.png`；DB：`SELECT role,agent_kind,substr(content,1,60) FROM messages WHERE session_id='9539dca8-…'` |
 | D8 | S2 | 换电脑后 A 上伙伴的“例行任务”页缺内置“跟进（内置）”行，约 30 分钟后才补建。 | 低 | README §内置“跟进”条目复查；`S2-A换后本机-dark-08-例行任务.txt` |
 | D9 | S2 | 保留下来的、新电脑没有的 MCP 引用在能力页显示内部 id `custom_mcp-a`，提示是通用文案“本机或当前执行环境暂不可用，请先配置连接或系统授权。”，不是规格写的“这台电脑不可用”，也没显示 MCP 名称。 | 低 | `R3-A换回B后-B伙伴2-能力页.txt`、`R3-…-MCP引用保留-dark.png` |
+| D11 | 收尾/手机准备 | 在主力电脑上永久删除伙伴后，**另一台电脑上的本地旧副本仍在**：B 的“+ → 发消息或委派”列表里仍能看到已删除的「验收伙伴·可删除」（A 的本地库里也还有已删除的「验收伙伴2·可删除」那行）。侧栏看不到，但委派入口里还在。 | 中 | 手机准备时 B 的 “+” 菜单截图（本机）；DB：`SELECT id FROM bot_profiles WHERE id LIKE 'bot_17927%'`（A、B 各剩对方那条） |
 | D10 | S2 | 第 1 轮里伙伴用**原生图片工具**生成的图（`tool_result` 里的 `native_image_delivery`，回复正文无 `cindy-media://`）换电脑后在 A 的聊天里**不显示**（A 只导入 user/assistant 文本）。第 2 轮用 `cindy-media://` 正文引用则正常。 | 中（取决于产品是否要求原生图片结果也随行） | `S3-换后-A-聊天首次打开-dark.png`（无图） vs `R2-换后-A-伙伴2聊天-dark.png`（有图） |
 
 ---
@@ -194,10 +195,14 @@ A 的 `routines.json` 里伙伴1的内置跟进条目 14:17 还没有、14:36 �
 
 - 本机完整证据：`C:\Users\xd\Developer\cindy-accept-a\artifacts\bot-device-parity-acceptance\20261023-1225\`（本文件所在目录，约 141 个文件 / 29 MB）。
 - **推送到公开仓库的是脱敏副本**，不是上面这份：目标仓库 `nanaco666/cindy` 为 PUBLIC，而原始截图的左侧栏会露出账号下其它真实伙伴的最新消息片段，模型页还有一个人的邮箱。因此推送副本中：所有截图只保留右侧设置面板（去掉侧栏）或聊天主区（去掉侧栏）；删除了会露出该邮箱的 `S1-A远程-{light,dark}-04-模型.png` 两张；文本/JSON 中的邮箱与本机沙箱路径替换为 `<redacted-email>` / `<sandbox-path>`。其余内容与本机原件一致。
-- 推送分支：`pr-assets/cindy/bot-device-parity`，单个独立提交（`git commit -s`），只含证据文件。
+- 推送分支：`pr-assets/cindy/bot-device-parity`，单个独立提交 `71d3fb690a48f86047aaaddd3e19b9018f2c323e`（`git commit -s`），只含证据文件（66 张 PNG、59 个 txt、6 个 json、1 个 md；不含 `tools/` 脚本）。未建 PR。
 
 ## 更新记录
 
 - 2026-10-23 13:5x 写入 S1 结果。
 - 2026-10-23 14:3x 补入 S2/S3 三轮结果与缺陷 D6–D10。
 - 2026-10-23 15:xx 收尾：删除两个验收伙伴、关闭两实例、补入未覆盖项/副作用/磁盘/上传说明。
+
+## P3 修复复测（cindy/bot-device-fixes @ fb6b56236b）
+
+详见 `retest-p3/README.md`。摘要：D2、D6、D7、D8、D9、D10、D11 通过；D5 的“对齐”通过，“断线不跳动”仅在连接不稳定时成立（进程被关时面板被关掉）；**D1 只对一半**（主力在线但没开被控开关时横幅仍写“离线”）；新增 D12（说明行里的入口名与设置不一致）。两端 `FOREIGN KEY` = 0。
